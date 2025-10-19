@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""HTML to Markdown extraction with namespace support."""
+"""HTML to Markdown extraction with namespace support, glossary tagging, and PII stripping."""
 
 import json
 import logging
@@ -12,6 +12,7 @@ from datetime import datetime
 import trafilatura
 from bs4 import BeautifulSoup
 from readability import Document
+from src.glossary import get_glossary
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -32,6 +33,11 @@ class HTMLCleaner:
         ".toc", "aside"
     ]
 
+    # Regex patterns for PII detection and removal
+    EMAIL_PATTERN = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    PHONE_PATTERN = r'\b(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})\b'
+    SSN_PATTERN = r'\b\d{3}-\d{2}-\d{4}\b'
+
     @staticmethod
     def remove_noise(soup: BeautifulSoup) -> BeautifulSoup:
         """Remove navigation, ads, noise."""
@@ -39,6 +45,14 @@ class HTMLCleaner:
             for el in soup.select(selector):
                 el.decompose()
         return soup
+
+    @staticmethod
+    def strip_pii(text: str) -> str:
+        """Remove personally identifiable information (emails, phone numbers, SSN)."""
+        text = re.sub(HTMLCleaner.EMAIL_PATTERN, "[EMAIL]", text)
+        text = re.sub(HTMLCleaner.PHONE_PATTERN, "[PHONE]", text)
+        text = re.sub(HTMLCleaner.SSN_PATTERN, "[SSN]", text)
+        return text
 
     @staticmethod
     def extract_structure(soup: BeautifulSoup, base_url: str) -> tuple[str, dict]:
@@ -148,6 +162,13 @@ class MarkdownConverter:
                 logger.warning(f"⊘ Insufficient content: {url}")
                 return False
 
+            # Strip PII from markdown
+            md = HTMLCleaner.strip_pii(md)
+
+            # Detect glossary entities
+            glossary = get_glossary()
+            entities = list(glossary.detect_terms(md))
+
             fm = {
                 "url": url,
                 "namespace": namespace,
@@ -156,6 +177,7 @@ class MarkdownConverter:
                 "h2": headings.get("h2", []),
                 "fetched_at": meta.get("fetched_at"),
                 "sha256_raw": meta.get("sha256", ""),
+                "entities": entities,  # Detected glossary terms
             }
 
             ns_clean = DATA_CLEAN_DIR / namespace
@@ -167,7 +189,7 @@ class MarkdownConverter:
             with open(output, "w", encoding="utf-8") as f:
                 f.write(f"---\n{json.dumps(fm, indent=2)}\n---\n\n{md}")
 
-            logger.info(f"✓ {namespace}/{slug}: {len(md)} chars")
+            logger.info(f"✓ {namespace}/{slug}: {len(md)} chars, entities: {len(entities)}")
             return True
 
         except Exception as e:

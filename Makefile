@@ -21,4 +21,8 @@ eval-health:
 	@echo "Checking API health..."
 	@curl -s http://localhost:7000/health | $(PYTHON) -m json.tool
 
-.PHONY: serve test-llm test-rag eval eval-full eval-health
+eval-glossary:
+	@echo "Running glossary and hybrid retrieval evaluation..."
+	$(PYTHON) scripts/eval_rag.py
+
+.PHONY: serve test-llm test-rag eval eval-full eval-health eval-glossary
