@@ -313,6 +313,10 @@ def search(q: str, k: int | None = None, namespace: str | None = None, request: 
         # AXIOM 5: Optional reranking (silent fallback if not available)
         results = rerank(q, results_dedup, k) if results_dedup else []
 
+        # Add sequential 1-based rank to each result
+        for i, r in enumerate(results, start=1):
+            r["rank"] = i
+
         latency_ms = int((time.time() - t0) * 1000)
         logger.info(f"Search '{q}' k={k} -> {len(results)} results (unique URLs) in {latency_ms}ms")
 
@@ -395,11 +399,14 @@ def chat(req: ChatRequest, request: Request, x_api_token: str | None = Header(de
         ]
 
         t1 = time.time()
-        answer = LLMClient().chat(messages, max_tokens=800, temperature=0.2, stream=False)
+        # AXIOM 1: Determinism via configurable temperature (default 0.0 for strict determinism)
+        temp = float(os.getenv("LLM_TEMPERATURE", "0.0"))
+        answer = LLMClient().chat(messages, max_tokens=800, temperature=temp, stream=False)
         t_llm = int((time.time() - t1) * 1000)
 
         # AXIOM 2: Extract and validate citations (AXIOM 9: test this grounding)
-        citations_in_answer = re.findall(r'\[(\d+)\]', answer)
+        # Harden regex: capture [1], [2]... but avoid URLs/code; cap to two digits
+        citations_in_answer = re.findall(r'(?<!https?:\/\/[^\s]*)\[(\d{1,2})\]', answer)
         cited_chunks = []
         for cite_idx_str in set(citations_in_answer):
             try:

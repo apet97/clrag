@@ -56,7 +56,7 @@ def run_eval(base_url: str = "http://localhost:7000", k: int = 10):
     
     for i, qa in enumerate(qas, 1):
         q = qa["q"]
-        must_cite = qa.get("must_cite", [])
+        must_cite = qa.get("must", [])
         
         try:
             # Run search
