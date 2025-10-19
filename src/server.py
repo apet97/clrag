@@ -50,6 +50,7 @@ class NamespaceIndex(T.TypedDict):
     dim: int
 
 _indexes: dict[str, NamespaceIndex] = {}
+_index_normalized: dict[str, bool] = {}
 
 def _load_index_for_ns(ns: str) -> NamespaceIndex:
     root = INDEX_ROOT / ns
@@ -59,12 +60,15 @@ def _load_index_for_ns(ns: str) -> NamespaceIndex:
         raise RuntimeError(f"Index for namespace '{ns}' not found under {root}")
     index = faiss.read_index(str(idx_path))
     metas = json.loads(meta_path.read_text())
-    return {"index": index, "metas": metas["rows"], "dim": metas["dim"]}
+    rows = metas.get("rows") or metas.get("chunks", [])
+    return {"index": index, "metas": rows, "dim": metas.get("dim") or metas.get("dimension", 768)}
 
 def _ensure_loaded():
     if _indexes:
         return
     for ns in NAMESPACES:
+        meta_data = json.loads((INDEX_ROOT / ns / "meta.json").read_text())
+        _index_normalized[ns] = meta_data.get("normalized", False)
         _indexes[ns] = _load_index_for_ns(ns)
     logger.info(f"Loaded namespaces: {list(_indexes.keys())}")
 
@@ -134,11 +138,13 @@ def health():
     except Exception as e:
         ok = False
         logger.error(f"Index load error: {e}")
+    index_normalized = all(_index_normalized.get(ns, False) for ns in _indexes.keys()) if _indexes else None
     return {
         "ok": ok,
         "namespaces": list(_indexes.keys()),
         "mode": "mock" if MOCK_LLM else "live",
         "llm_api_type": os.getenv("LLM_API_TYPE","ollama"),
+        "index_normalized": index_normalized,
     }
 
 @app.get("/config")

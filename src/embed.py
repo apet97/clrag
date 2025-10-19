@@ -100,8 +100,19 @@ class EmbeddingBuilder:
             json.dump({
                 "model": EMBEDDING_MODEL,
                 "dimension": dim,
+                "dim": dim,
                 "num_vectors": index.ntotal,
+                "normalized": True,
                 "chunks": [{
+                    "id": c["id"],
+                    "parent_id": c.get("parent_id"),
+                    "url": c["url"],
+                    "title": c["title"],
+                    "headers": c["headers"],
+                    "tokens": c["tokens"],
+                    "node_type": c.get("node_type", "child"),
+                } for c in chunks],
+                "rows": [{
                     "id": c["id"],
                     "parent_id": c.get("parent_id"),
                     "url": c["url"],
