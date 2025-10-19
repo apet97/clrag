@@ -1,0 +1,18 @@
+# langsmith-pricing-faq
+
+> Source: https://docs.langchain.com/langsmith/pricing-faq
+
+Questions and Answers
+I’ve been using LangSmith since before pricing took effect for new users. When will pricing go into effect for my account?
+If you’ve been using LangSmith already, your usage will be billable starting in July 2024. At that point if you want to add seats or use more than the monthly allotment of free traces, you will need to add a credit card to LangSmith or contact sales. If you are interested in the Enterprise plan with higher rate limits and special deployment options, you can learn more or make a purchase by contacting our sales team.Which plan is right for me?
+If you’re an individual developer, the Developer plan is a great choice for small projects. For teams that want to collaborate in LangSmith, check out the Plus plan. If you are an early-stage startup building an AI application, you may be eligible for our Startup plan with discounted prices and a generous free monthly trace allotment. Please reach out via our Startup Contact Form for more details. If you need more advanced administration, authentication and authorization, deployment options, support, or annual invoicing, the Enterprise plan is right for you. Please reach out via our Sales Contact Form for more details.What is a seat?
+A seat is a distinct user inside your organization. We consider the total number of users (including invited users) to determine the number of seats to bill.What is a trace?
+A trace is one complete invocation of your application chain or agent, evaluator run, or playground run. Here is an example of a single trace.What is an ingested event?
+An ingested event is any distinct, trace-related data sent to LangSmith. This includes:- Inputs, outputs and metadata sent at the start of a run step within a trace
+- Inputs, outputs and metadata sent at the end of a run step within a trace
+- Feedback on run steps or traces
+I’ve hit my rate or usage limits. What can I do?
+When you first sign up for a LangSmith account, you get a Personal organization that is limited to 5000 monthly traces. To continue sending traces after reaching this limit, upgrade to the Developer or Plus plans by adding a credit card. Head to Plans and Billing to upgrade. Similarly, if you’ve hit the rate limits on your current plan, you can upgrade to a higher plan to get higher limits, or reach out to support@langchain.dev with questions.I have a developer account, can I upgrade my account to the Plus or Enterprise plan?
+Yes, Developer plan users can easily upgrade to the Plus plan on the Plans and Billing page. For the Enterprise plan, please contact our sales team to discuss your needs.How does billing work?
+Seats Seats are billed monthly on the first of the month. Additional seats purchased mid-month are pro-rated and billed within one day of the purchase. Seats removed mid-month will not be credited. Traces As long as you have a card on file in your account, we’ll service your traces and bill you on the first of the month for traces that you submitted in the previous month. You will be able to set usage limits if you so choose to limit the maximum charges you could incur in any given month.Can I limit how much I spend on tracing?
+You can set limits on the number of traces that can be sent to LangSmith per month on the Usage configuration page.While we do show you the dollar value of your usage limit for convenience, this limit evaluated in terms of number of traces instead of dollar amount. For example, if you are approved for our startup plan tier where you are given a generous allotment of free traces, your usage limit will not automatically change.You are not currently able to set a spend limit in the product.

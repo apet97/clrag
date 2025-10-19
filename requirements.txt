@@ -1,0 +1,39 @@
+# Web Scraping & HTTP
+httpx==0.25.1
+urllib3==2.1.0
+
+# Content Extraction & Parsing
+trafilatura==1.6.1
+beautifulsoup4==4.12.2
+readability-lxml==0.8.1
+lxml==4.9.3
+markdown==3.5.1
+
+# API Framework
+fastapi==0.104.1
+uvicorn==0.24.0
+pydantic==2.5.0
+
+# Vector Search & Embeddings
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.0
+numpy>=1.26.0
+
+# Reranking (cross-encoder) - optional for now
+# torch==2.0.1
+# transformers==4.34.0
+
+# Full-text search & BM25
+whoosh==2.7.4
+
+# Utilities
+python-dotenv==1.0.0
+tqdm==4.66.1
+pyyaml==6.0.1
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Optional: for HyDE query generation (requires LLM)
+# langchain==0.0.310  # Can add if needed for HyDE generation
