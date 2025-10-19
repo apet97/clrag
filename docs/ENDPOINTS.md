@@ -22,7 +22,7 @@ Returns server status including index health and LLM endpoint availability.
 ```
 
 ### GET /config
-Returns effective configuration (non-secrets).
+Returns effective configuration (non-secrets). In production, `llm_base_url` is hidden unless you provide the correct admin token.
 
 **Response:**
 ```json
@@ -36,8 +36,15 @@ Returns effective configuration (non-secrets).
   "llm_tags_path": "/api/tags",
   "llm_timeout_seconds": 30,
   "llm_api_type": "ollama",
+  "streaming_enabled": false,
+  "env": "dev",
   "mock_llm": false
 }
+```
+
+**Production Security:** If `ENV=prod` and `llm_base_url` is hidden:
+```bash
+curl -H "x-admin-token: YOUR_ADMIN_TOKEN" http://localhost:7000/config
 ```
 
 ### GET /search?q={query}&k={k}&namespace={ns}
@@ -79,8 +86,9 @@ export LLM_API_TYPE=ollama
 export LLM_BASE_URL=http://10.127.0.192:11434
 export LLM_CHAT_PATH=/api/chat
 export LLM_TAGS_PATH=/api/tags
-export LLM_MODEL=gpt-oss20b
+export LLM_MODEL=gpt-oss:20b
 export LLM_TIMEOUT_SECONDS=30
+export LLM_VERIFY_SSL=false
 ```
 
 **Validation:**
@@ -92,7 +100,7 @@ curl http://10.127.0.192:11434/api/tags
 curl -X POST http://10.127.0.192:11434/api/chat \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "gpt-oss20b",
+    "model": "gpt-oss:20b",
     "messages": [{"role":"user","content":"ping"}],
     "stream": false
   }'
@@ -113,8 +121,8 @@ export LLM_API_TYPE=ollama
 export LLM_BASE_URL=https://ai.company.tld
 export LLM_CHAT_PATH=/ollama/api/chat
 export LLM_TAGS_PATH=/ollama/api/tags
-export LLM_MODEL=gpt-oss20b
-export LLM_VERIFY_SSL=true  # or false if self-signed
+export LLM_MODEL=gpt-oss:20b
+export LLM_VERIFY_SSL=true  # Auto-detected for https://, but can override
 ```
 
 **Important:** Ensure the reverse proxy properly exposes both `/ollama/api/chat` and `/ollama/api/tags` endpoints.
@@ -132,7 +140,7 @@ curl ${LLM_BASE_URL}${LLM_TAGS_PATH}
 curl -X POST ${LLM_BASE_URL}${LLM_CHAT_PATH} \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "gpt-oss20b",
+    "model": "gpt-oss:20b",
     "messages": [{"role":"user","content":"ping"}],
     "stream": false
   }'
@@ -153,7 +161,7 @@ export LLM_API_TYPE=ollama
 export LLM_BASE_URL=http://localhost:11434
 export LLM_CHAT_PATH=/api/chat
 export LLM_TAGS_PATH=/api/tags
-export LLM_MODEL=gpt-oss20b
+export LLM_MODEL=gpt-oss:20b
 ```
 
 **Validation:**
@@ -165,7 +173,7 @@ curl http://localhost:11434/api/tags
 curl -X POST http://localhost:11434/api/chat \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "gpt-oss20b",
+    "model": "gpt-oss:20b",
     "messages": [{"role":"user","content":"test"}],
     "stream": false
   }'
@@ -236,6 +244,44 @@ curl http://localhost:7000/chat \
 
 ---
 
+## Deep Health Check
+
+`GET /health?deep=1` performs a lightweight chat ping in addition to the `/api/tags` endpoint check.
+
+**Example:**
+```bash
+curl 'http://localhost:7000/health?deep=1' | python -m json.tool
+```
+
+**Response fields (in addition to basic health):**
+- `llm_deep_ok`: boolean or null (null in mock mode)
+- `llm_deep_details`: diagnostic string ("chat ping ok", "empty response", or error message)
+
+---
+
+## Streaming
+
+Enable Ollama SSE aggregation (optional, off by default):
+
+```bash
+export STREAMING_ENABLED=true
+```
+
+**Notes:**
+- `/chat` request parameter `stream` is still accepted; when `STREAMING_ENABLED=false`, streaming requests fall back to non-streaming.
+- When enabled and the request body includes `"stream": true`, the server aggregates Ollama SSE chunks into a single response.
+- Streaming is automatically disabled if the endpoint returns an error.
+
+---
+
+## Security
+
+- **SSL/TLS:** Auto-detected for `https://` base URLs (defaults to `LLM_VERIFY_SSL=true`). Can be overridden with `LLM_VERIFY_SSL`.
+- **Admin Token:** In `ENV=prod`, use `x-admin-token: YOUR_ADMIN_TOKEN` header on `/config` to reveal `llm_base_url`.
+- **Deprecated:** `LLM_TIMEOUT` alias is supported but logs a warning; use `LLM_TIMEOUT_SECONDS` instead.
+
+---
+
 ## Full Integration Test
 
 ```bash
@@ -252,13 +298,17 @@ curl http://localhost:7000/health | python -m json.tool
 echo "2. Checking config..."
 curl http://localhost:7000/config | python -m json.tool
 
+# Deep health
+echo "3. Testing deep health..."
+curl 'http://localhost:7000/health?deep=1' | python -m json.tool
+
 # Search endpoint
-echo "3. Testing search..."
+echo "4. Testing search..."
 curl -H "x-api-token: change-me" \
   'http://localhost:7000/search?q=timesheet&k=3' | python -m json.tool
 
 # Chat endpoint
-echo "4. Testing chat..."
+echo "5. Testing chat..."
 curl -X POST http://localhost:7000/chat \
   -H "Content-Type: application/json" \
   -H "x-api-token: change-me" \

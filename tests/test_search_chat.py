@@ -3,6 +3,7 @@
 import os
 import json
 import pytest
+import importlib
 from pathlib import Path
 
 # Skip tests if index is missing
@@ -90,6 +91,25 @@ def test_health_endpoint(client):
     # If indexes are loaded, they should be normalized
     if data["ok"]:
         assert data["index_normalized"] is True, "Indexes should be L2-normalized"
+
+
+@SKIP_IF_NO_INDEX
+def test_chat_non_streaming_when_disabled(client):
+    """Ensure /chat works with stream=false when STREAMING_ENABLED=false."""
+    os.environ["MOCK_LLM"] = "true"
+    os.environ["STREAMING_ENABLED"] = "false"
+    import src.server
+    importlib.reload(src.server)
+    from src.server import app as reloaded_app
+    from fastapi.testclient import TestClient
+    client_reloaded = TestClient(reloaded_app)
+
+    payload = {"question": "ping?", "k": 1}
+    r = client_reloaded.post("/chat", json=payload, headers={"x-api-token": "change-me"})
+    assert r.status_code == 200
+    data = r.json()
+    assert "answer" in data
+    assert isinstance(data["answer"], str)
 
 
 @pytest.fixture

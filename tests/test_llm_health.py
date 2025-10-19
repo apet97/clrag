@@ -2,6 +2,7 @@
 
 import os
 import pytest
+import importlib
 
 
 @pytest.fixture
@@ -95,3 +96,45 @@ def test_llm_client_health_mock():
 
     assert result["ok"] is True
     assert "mock mode" in result["details"]
+
+def test_deep_health_skip_in_mock(client):
+    """deep health returns nulls in mock mode."""
+    os.environ["MOCK_LLM"] = "true"
+    import importlib
+    import src.server
+    importlib.reload(src.server)
+    from src.server import app as reloaded_app
+    from fastapi.testclient import TestClient
+    client = TestClient(reloaded_app)
+
+    resp = client.get("/health?deep=1")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["llm_deep_ok"] is None
+    assert data["llm_deep_details"] is None
+
+def test_timeout_alias_deprecated():
+    """LLM_TIMEOUT alias triggers warning when seconds unset."""
+    os.environ.pop("LLM_TIMEOUT_SECONDS", None)
+    os.environ["LLM_TIMEOUT"] = "5"
+
+    import src.llm_client as lc
+    lc_reload = importlib.reload(lc)  # recompute DEFAULT_TIMEOUT
+    assert lc_reload.DEFAULT_TIMEOUT == 5.0
+
+def test_streaming_disabled_in_config(client):
+    """streaming_enabled reflects STREAMING_ENABLED env."""
+    os.environ["STREAMING_ENABLED"] = "false"
+    resp = client.get("/config")
+    assert resp.status_code == 200
+    assert resp.json()["streaming_enabled"] is False
+
+def test_model_default_is_correct(client):
+    """Model default should be gpt-oss:20b with colon."""
+    resp = client.get("/config")
+    assert resp.status_code == 200
+    # The default should be set in LLMClient
+    from src.llm_client import LLMClient
+    os.environ.pop("LLM_MODEL", None)  # Remove to test default
+    llm = LLMClient()
+    assert llm.model == "gpt-oss:20b"

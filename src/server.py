@@ -10,7 +10,7 @@ from loguru import logger
 
 import faiss
 
-from src.llm_client import LLMClient
+from src.llm_client import LLMClient, close_http_client
 from src.embeddings import embed_query
 
 API_TOKEN = os.getenv("API_TOKEN", "change-me")
@@ -26,6 +26,14 @@ INDEX_ROOT = Path("index/faiss")
 MOCK_LLM = os.getenv("MOCK_LLM", "false").lower() == "true"
 
 app = FastAPI(default_response_class=ORJSONResponse)
+
+@app.on_event("shutdown")
+def _shutdown():
+    """Clean up HTTP client on FastAPI shutdown."""
+    try:
+        close_http_client()
+    except Exception as e:
+        logger.warning(f"Error closing HTTP client: {e}")
 
 # --------- FAISS index manager ---------
 class NamespaceIndex(T.TypedDict):
@@ -116,7 +124,7 @@ def rate_limit(ip: str, min_interval: float = 0.25):
 
 # --------- Routes ---------
 @app.get("/health")
-def health():
+def health(deep: int = 0):
     ok = True
     try:
         _ensure_loaded()
@@ -128,15 +136,34 @@ def health():
     # Check LLM health if not mock mode
     llm_ok = None
     llm_details = None
+    llm_deep_ok = None
+    llm_deep_details = None
+
     if not MOCK_LLM:
         try:
             llm = LLMClient()
             llm_check = llm.health_check()
             llm_ok = llm_check.get("ok")
             llm_details = llm_check.get("details")
+
+            # Deep health check: try a lightweight chat ping
+            if deep:
+                try:
+                    result = llm.chat([{"role": "user", "content": "ping"}], stream=False)
+                    llm_deep_ok = bool(result)
+                    llm_deep_details = "chat ping ok" if llm_deep_ok else "empty response"
+                except Exception as e:
+                    llm_deep_ok = False
+                    llm_deep_details = f"chat ping failed: {str(e)}"
         except Exception as e:
             llm_ok = False
             llm_details = f"Error initializing LLM client: {str(e)}"
+            llm_deep_ok = False
+            llm_deep_details = "skipped due to init error"
+    else:
+        # In mock mode, deep checks are skipped
+        llm_deep_ok = None
+        llm_deep_details = None
 
     return {
         "ok": ok,
@@ -145,24 +172,40 @@ def health():
         "llm_api_type": os.getenv("LLM_API_TYPE","ollama"),
         "llm_ok": llm_ok,
         "llm_details": llm_details,
+        "llm_deep_ok": llm_deep_ok,
+        "llm_deep_details": llm_deep_details,
         "index_normalized": index_normalized,
         "index_normalized_by_ns": {ns: _index_normalized.get(ns, None) for ns in _indexes.keys()} if _indexes else {},
     }
 
 @app.get("/config")
-def config():
-    return {
+def config(x_admin_token: str | None = Header(default=None)):
+    ENV = os.getenv("ENV", "dev")
+    ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "change-me")
+
+    # In prod, hide llm_base_url unless admin token matches
+    reveal_sensitive = (ENV != "prod") or (ADMIN_TOKEN != "change-me" and x_admin_token == ADMIN_TOKEN)
+
+    out = {
         "namespaces_env": NAMESPACES,
         "index_mode": os.getenv("INDEX_MODE","single"),
         "embedding_model": EMBEDDING_MODEL,
         "retrieval_k": RETRIEVAL_K,
-        "llm_base_url": os.getenv("LLM_BASE_URL", "http://10.127.0.192:11434"),
+        "streaming_enabled": os.getenv("STREAMING_ENABLED","false").lower()=="true",
+        "env": ENV,
         "llm_chat_path": os.getenv("LLM_CHAT_PATH", "/api/chat"),
         "llm_tags_path": os.getenv("LLM_TAGS_PATH", "/api/tags"),
         "llm_timeout_seconds": int(os.getenv("LLM_TIMEOUT_SECONDS", "30")),
         "llm_api_type": os.getenv("LLM_API_TYPE", "ollama"),
         "mock_llm": MOCK_LLM,
     }
+
+    if reveal_sensitive:
+        out["llm_base_url"] = os.getenv("LLM_BASE_URL", "http://10.127.0.192:11434")
+    else:
+        out["llm_base_url"] = "<hidden>"
+
+    return out
 
 @app.get("/search", response_model=SearchResponse)
 def search(q: str, k: int | None = None, namespace: str | None = None, request: Request = None, x_api_token: str | None = Header(default=None)):
