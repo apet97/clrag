@@ -1,6 +1,6 @@
 from __future__ import annotations
-import os, time, json, typing as T
-from urllib.parse import urljoin
+import os, time, json, typing as T, random, re
+from urllib.parse import urljoin, urlparse, parse_qs, urlencode
 import httpx
 from loguru import logger
 
@@ -28,11 +28,74 @@ RETRIES = int(os.getenv("LLM_RETRIES", "3"))
 BACKOFF = float(os.getenv("LLM_BACKOFF", "0.75"))
 STREAMING_ENABLED = os.getenv("STREAMING_ENABLED", "false").lower() == "true"
 
+def _validate_config() -> None:
+    """Validate LLM configuration on startup. Raises ValueError if invalid."""
+    # Note: LLM_BASE_URL should be set in .env; use <INTERNAL_OLLAMA_HOST> for internal instance
+    base_url = os.getenv("LLM_BASE_URL", "").strip()
+    chat_path = os.getenv("LLM_CHAT_PATH", "").strip()
+    tags_path = os.getenv("LLM_TAGS_PATH", "").strip()
+    api_type = os.getenv("LLM_API_TYPE", "").strip().lower()
+    mock_llm = os.getenv("MOCK_LLM", "false").lower() == "true"
+
+    # Validate API type
+    if api_type not in ("ollama", "openai"):
+        raise ValueError(f"LLM_API_TYPE must be 'ollama' or 'openai', got: {api_type}")
+
+    # If not in mock mode, validate base URL is set and is http(s)
+    if not mock_llm:
+        if not base_url:
+            raise ValueError("LLM_BASE_URL is required when MOCK_LLM=false")
+        if not base_url.startswith(("http://", "https://")):
+            raise ValueError(f"LLM_BASE_URL must be http:// or https://, got: {base_url}")
+
+    # Validate paths start with /
+    for name, path in [("LLM_CHAT_PATH", chat_path), ("LLM_TAGS_PATH", tags_path)]:
+        if path and not path.startswith("/"):
+            raise ValueError(f"{name} must start with '/', got: {path}")
+
+    # Validate timeouts are positive
+    if DEFAULT_TIMEOUT <= 0:
+        raise ValueError(f"LLM_TIMEOUT_SECONDS must be positive, got: {DEFAULT_TIMEOUT}")
+    if RETRIES < 0:
+        raise ValueError(f"LLM_RETRIES must be non-negative, got: {RETRIES}")
+    if BACKOFF <= 0:
+        raise ValueError(f"LLM_BACKOFF must be positive, got: {BACKOFF}")
+
+    logger.info("LLM config validation passed")
+
+def _sanitize_url(url: str) -> str:
+    """Remove or mask sensitive query parameters from URL for logging."""
+    try:
+        parsed = urlparse(url)
+        if not parsed.query:
+            return url
+        # Parse query params
+        params = parse_qs(parsed.query, keep_blank_values=True)
+        # Mask sensitive params
+        for sensitive_key in ("token", "key", "api_key", "password", "secret"):
+            if sensitive_key in params:
+                params[sensitive_key] = ["***"]
+        # Reconstruct query string
+        sanitized_qs = "&".join(f"{k}={v[0]}" for k, v in params.items())
+        return f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{sanitized_qs}" if sanitized_qs else f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+    except Exception:
+        return url
+
+def _redact_token(text: str) -> str:
+    """Redact Bearer token values from log text."""
+    return re.sub(r'Bearer\s+[^\s]+', 'Bearer ***', text, flags=re.IGNORECASE)
+
+def _cap_response(text: str, max_len: int = 200) -> str:
+    """Cap response body length for logging."""
+    if len(text) > max_len:
+        return text[:max_len] + f"... ({len(text)-max_len} more bytes)"
+    return text
+
 # Module-level HTTP client (reused across instances)
 HTTP_CLIENT: httpx.Client | None = None
 
 def _get_http_client() -> httpx.Client:
-    """Get or create module-level HTTP client."""
+    """Get or create module-level HTTP client with production-grade config."""
     global HTTP_CLIENT
     if HTTP_CLIENT is None:
         base_url = os.getenv("LLM_BASE_URL", "http://10.127.0.192:11434").strip()
@@ -42,7 +105,17 @@ def _get_http_client() -> httpx.Client:
             verify = verify_env
         else:
             verify = base_url.startswith("https://")
-        HTTP_CLIENT = httpx.Client(timeout=DEFAULT_TIMEOUT, verify=verify)
+
+        # Production-grade timeout and connection pooling
+        timeout = httpx.Timeout(connect=5.0, read=DEFAULT_TIMEOUT, write=10.0, pool=5.0)
+        limits = httpx.Limits(max_keepalive_connections=10, max_connections=20)
+
+        HTTP_CLIENT = httpx.Client(
+            timeout=timeout,
+            verify=verify,
+            limits=limits,
+            follow_redirects=True
+        )
     return HTTP_CLIENT
 
 def close_http_client() -> None:
@@ -56,8 +129,12 @@ def close_http_client() -> None:
 
 class LLMClient:
     def __init__(self) -> None:
+        # Validate configuration early (on first instantiation)
+        _validate_config()
+
         self.api_type = os.getenv("LLM_API_TYPE", "ollama").strip().lower()
-        self.base_url = os.getenv("LLM_BASE_URL", "http://10.127.0.192:11434").strip()
+        # Default to localhost for dev; use LLM_BASE_URL env for production/internal hosts
+        self.base_url = os.getenv("LLM_BASE_URL", "http://localhost:11434").strip()
         self.chat_path = os.getenv("LLM_CHAT_PATH", "/api/chat").strip()
         self.tags_path = os.getenv("LLM_TAGS_PATH", "/api/tags").strip()
         self.model = os.getenv("LLM_MODEL", "gpt-oss:20b").strip()
@@ -67,9 +144,6 @@ class LLMClient:
         self.chat_url = self._build_url(self.chat_path)
         self.tags_url = self._build_url(self.tags_path)
 
-        if not self.base_url and not self.mock:
-            raise RuntimeError("LLM_BASE_URL is required when MOCK_LLM=false")
-
     def _build_url(self, path: str) -> str:
         """Build full URL from base and path using urljoin."""
         base = self.base_url.rstrip("/")
@@ -77,15 +151,22 @@ class LLMClient:
         return urljoin(base + "/", path_part)
 
     def _post_json(self, url: str, payload: dict, headers: dict | None = None) -> str:
-        """POST with retries and exponential backoff. Returns response text or raises."""
+        """POST with retries, exponential backoff with jitter, and auth. Returns response text or raises."""
         headers = {"Content-Type": "application/json", **(headers or {})}
+
+        # Add Bearer token if configured
+        bearer_token = os.getenv("LLM_BEARER_TOKEN", "").strip()
+        if bearer_token:
+            headers["Authorization"] = f"Bearer {bearer_token}"
+
         delay = BACKOFF
         last_error: Exception | None = None
+        sanitized_url = _sanitize_url(url)
 
         for attempt in range(1, RETRIES + 1):
             try:
                 resp = _get_http_client().post(url, json=payload, headers=headers)
-                # Treat 5xx as retryable
+                # Treat 5xx as retryable; skip retry logic for 4xx
                 if 500 <= resp.status_code < 600:
                     raise httpx.HTTPStatusError(
                         f"server {resp.status_code}",
@@ -94,12 +175,26 @@ class LLMClient:
                     )
                 resp.raise_for_status()
                 return resp.text
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                # Retry on network timeouts and connection errors
+                last_error = e
+                if attempt == RETRIES:
+                    break
+                # Jittered exponential backoff
+                jitter = random.uniform(0.0, 0.1 * delay)
+                sleep_time = delay + jitter
+                logger.debug(f"LLM POST attempt {attempt}/{RETRIES} failed to {sanitized_url}: {type(e).__name__}; backing off {sleep_time:.2f}s")
+                time.sleep(sleep_time)
+                delay *= 2
             except Exception as e:
                 last_error = e
                 if attempt == RETRIES:
                     break
-                logger.debug(f"LLM POST attempt {attempt}/{RETRIES} failed: {e}; backing off {delay:.2f}s")
-                time.sleep(delay)
+                # Jittered exponential backoff for other errors
+                jitter = random.uniform(0.0, 0.1 * delay)
+                sleep_time = delay + jitter
+                logger.debug(f"LLM POST attempt {attempt}/{RETRIES} failed to {sanitized_url}: {type(e).__name__}; backing off {sleep_time:.2f}s")
+                time.sleep(sleep_time)
                 delay *= 2
 
         raise RuntimeError(f"LLM POST failed after {RETRIES} attempts: {last_error}")

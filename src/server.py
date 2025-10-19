@@ -195,6 +195,27 @@ def health(deep: int = 0):
         "index_metrics": index_metrics,
     }
 
+@app.get("/live")
+def live():
+    """Liveness probe: returns 200 if process is alive (no dependencies checked)."""
+    return {"status": "alive"}
+
+@app.get("/ready")
+def ready():
+    """Readiness probe: returns 200 only if index loaded and LLM ready."""
+    try:
+        _ensure_loaded()
+        if not MOCK_LLM:
+            llm = LLMClient()
+            llm_check = llm.health_check()
+            if not llm_check.get("ok"):
+                logger.warning(f"LLM not ready: {llm_check.get('details')}")
+                return {"status": "not_ready", "reason": "llm_unhealthy"}, 503
+        return {"status": "ready"}
+    except Exception as e:
+        logger.warning(f"Readiness check failed: {e}")
+        return {"status": "not_ready", "reason": str(e)}, 503
+
 @app.get("/config")
 def config(x_admin_token: str | None = Header(default=None)):
     ENV = os.getenv("ENV", "dev")
@@ -218,7 +239,7 @@ def config(x_admin_token: str | None = Header(default=None)):
     }
 
     if reveal_sensitive:
-        out["llm_base_url"] = os.getenv("LLM_BASE_URL", "http://10.127.0.192:11434")
+        out["llm_base_url"] = os.getenv("LLM_BASE_URL", "http://localhost:11434")
     else:
         out["llm_base_url"] = "<hidden>"
 
@@ -277,7 +298,7 @@ def chat(req: ChatRequest, request: Request, x_api_token: str | None = Header(de
         "answer": answer,
         "sources": sources,
         "latency_ms": {"retrieval": t_retr, "llm": t_llm, "total": int((time.time()-t0)*1000)},
-        "meta": {"model": os.getenv("LLM_MODEL","gpt-oss20b"), "namespaces_used": ns_list, "k": k, "api_type": os.getenv("LLM_API_TYPE","ollama")},
+        "meta": {"model": os.getenv("LLM_MODEL","gpt-oss:20b"), "namespaces_used": ns_list, "k": k, "api_type": os.getenv("LLM_API_TYPE","ollama")},
     }
 
 if __name__ == "__main__":
