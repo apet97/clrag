@@ -25,4 +25,8 @@ eval-glossary:
 	@echo "Running glossary and hybrid retrieval evaluation..."
 	$(PYTHON) scripts/eval_rag.py
 
-.PHONY: serve test-llm test-rag eval eval-full eval-health eval-glossary
+eval-axioms:
+	@echo "Running comprehensive RAG Standard v1 evaluation (AXIOM 1-9)..."
+	$(PYTHON) eval/run_eval.py http://localhost:7000
+
+.PHONY: serve test-llm test-rag eval eval-full eval-health eval-glossary eval-axioms
