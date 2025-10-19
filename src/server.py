@@ -8,10 +8,10 @@ from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 from loguru import logger
 
-from sentence_transformers import SentenceTransformer
 import faiss
 
 from src.llm_client import LLMClient
+from src.embeddings import embed_query
 
 API_TOKEN = os.getenv("API_TOKEN", "change-me")
 HOST = os.getenv("API_HOST", "0.0.0.0")
@@ -26,22 +26,6 @@ INDEX_ROOT = Path("index/faiss")
 MOCK_LLM = os.getenv("MOCK_LLM", "false").lower() == "true"
 
 app = FastAPI(default_response_class=ORJSONResponse)
-
-# --------- Embedding loader ---------
-_embedder = None
-def get_embedder():
-    global _embedder
-    if _embedder is None:
-        logger.info(f"Loading embedder: {EMBEDDING_MODEL}")
-        _embedder = SentenceTransformer(EMBEDDING_MODEL)
-        _embedder.max_seq_length = 512
-    return _embedder
-
-def embed_query(text: str) -> np.ndarray:
-    q = f"query: {text.strip()}"
-    v = get_embedder().encode([q], convert_to_numpy=True).astype(np.float32)
-    v /= (np.linalg.norm(v, axis=1, keepdims=True) + 1e-12)
-    return v
 
 # --------- FAISS index manager ---------
 class NamespaceIndex(T.TypedDict):
@@ -118,7 +102,8 @@ class ChatResponse(BaseModel):
 
 # --------- Auth/limits ---------
 def require_token(token: str | None):
-    if token != API_TOKEN:
+    # If API_TOKEN is set (not default), enforce it; otherwise allow all
+    if API_TOKEN != "change-me" and token != API_TOKEN:
         raise HTTPException(status_code=401, detail="unauthorized")
 
 _last_req: dict[str, float] = {}
@@ -145,6 +130,7 @@ def health():
         "mode": "mock" if MOCK_LLM else "live",
         "llm_api_type": os.getenv("LLM_API_TYPE","ollama"),
         "index_normalized": index_normalized,
+        "index_normalized_by_ns": {ns: _index_normalized.get(ns, None) for ns in _indexes.keys()} if _indexes else {},
     }
 
 @app.get("/config")
