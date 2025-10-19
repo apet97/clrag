@@ -1,82 +1,74 @@
-"""Cross-encoder reranking for improved relevance."""
-from __future__ import annotations
+"""
+Optional cross-encoder reranking.
+
+AXIOM 5: Use "BAAI/bge-reranker-base" if available. If not installed, skip silently.
+Never block retrieval on reranker availability.
+"""
+
 import os
-from typing import Any
+from typing import Optional
+
+from loguru import logger
+
+try:
+    from FlagEmbedding import FlagReranker
+    RERANK_AVAILABLE = True
+except ImportError:
+    RERANK_AVAILABLE = False
+    logger.debug("FlagEmbedding not installed. Reranking disabled. Install with: pip install FlagEmbedding")
 
 
-# Module-level singleton for cross-encoder model
-_model: Any = None
+_reranker: Optional[FlagReranker] = None
 
 
-def load(model_name: str = "BAAI/bge-reranker-large"):
-    """
-    Load cross-encoder model (lazy singleton).
+def _get_reranker() -> Optional[FlagReranker]:
+    """Lazy-load reranker if available."""
+    global _reranker
+    if not RERANK_AVAILABLE:
+        return None
 
-    Args:
-        model_name: Hugging Face model identifier
-
-    Returns:
-        Loaded CrossEncoder instance
-    """
-    global _model
-
-    if _model is None:
-        # Optional: skip reranking if RERANKING_DISABLED env var set
-        if os.getenv("RERANKING_DISABLED") == "true":
+    if _reranker is None:
+        try:
+            logger.info("Loading reranker model: BAAI/bge-reranker-base")
+            _reranker = FlagReranker("BAAI/bge-reranker-base", use_fp16=False)
+            logger.info("Reranker loaded successfully")
+        except Exception as e:
+            logger.warning(f"Failed to load reranker: {e}. Continuing without reranking.")
             return None
 
-        try:
-            from sentence_transformers import CrossEncoder
-
-            _model = CrossEncoder(model_name, trust_remote_code=True)
-        except ImportError:
-            import warnings
-
-            warnings.warn(
-                "sentence_transformers not installed. Reranking disabled. "
-                "Install: pip install sentence_transformers"
-            )
-            _model = False  # Sentinel: tried and failed
-
-    return None if _model is False else _model
+    return _reranker
 
 
-def rerank(
-    query: str,
-    candidates: list[dict[str, Any]],
-    topk: int = 8
-) -> list[dict[str, Any]]:
+def rerank(query: str, docs: list[dict], topk: int) -> list[dict]:
     """
-    Rerank candidates using cross-encoder, with fallback if model unavailable.
-
-    Args:
-        query: Search query
-        candidates: List of {"text": str, "meta": {...}, "score": float} dicts
-        topk: Number of results to return
-
-    Returns:
-        Reranked candidates (top-k), sorted by rerank score descending
+    Rerank documents using cross-encoder if available.
+    Falls back to score-based sorting if reranker not available.
     """
-    model = load()
+    if not docs:
+        return []
 
-    if model is None:
-        # Model unavailable: fall back to original scoring
-        return sorted(candidates, key=lambda x: x.get("score", 0.0), reverse=True)[:topk]
-
-    # Compute reranking scores
-    pairs = [(query, c["text"]) for c in candidates]
+    reranker = _get_reranker()
+    if reranker is None:
+        sorted_docs = sorted(docs, key=lambda x: x.get("score", 0), reverse=True)
+        return sorted_docs[:topk]
 
     try:
-        scores = model.predict(pairs).tolist()
+        pairs = [(query, d.get("text", "")) for d in docs]
+        scores = reranker.compute_score(pairs, normalize=True)
+        ranked = sorted(zip(docs, scores), key=lambda x: x[1], reverse=True)
+        
+        out = []
+        for doc, score in ranked[:topk]:
+            doc_copy = dict(doc)
+            doc_copy["score"] = float(score)
+            out.append(doc_copy)
+        return out
     except Exception as e:
-        import warnings
+        logger.warning(f"Reranking failed: {e}. Falling back to original scores.")
+        sorted_docs = sorted(docs, key=lambda x: x.get("score", 0), reverse=True)
+        return sorted_docs[:topk]
 
-        warnings.warn(f"Reranking failed ({e}). Falling back to original scores.")
-        return sorted(candidates, key=lambda x: x.get("score", 0.0), reverse=True)[:topk]
 
-    # Annotate candidates with rerank score
-    for c, s in zip(candidates, scores):
-        c["rerank_score"] = float(s)
-
-    # Sort by rerank score and return top-k
-    return sorted(candidates, key=lambda x: x.get("rerank_score", 0.0), reverse=True)[:topk]
+def is_available() -> bool:
+    """Return whether reranking is available."""
+    return RERANK_AVAILABLE and _get_reranker() is not None

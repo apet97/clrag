@@ -1,0 +1,15 @@
+{"q": "How do I submit my weekly timesheet?", "answers": ["To submit a weekly timesheet, navigate to the Timesheets tab"], "must_cite": ["https://help.clockify.me/article/timesheet"]}
+{"q": "What is time off or PTO?", "answers": ["Time off or PTO is paid time away from work"], "must_cite": ["https://help.clockify.me/article/pto"]}
+{"q": "How do I set up the kiosk?", "answers": ["The kiosk allows employees to punch in and out"], "must_cite": ["https://help.clockify.me/article/kiosk"]}
+{"q": "What is a billable rate?", "answers": ["A billable rate is the hourly amount charged to clients"], "must_cite": ["https://help.clockify.me/article/billable-rate"]}
+{"q": "How do I create a project?", "answers": ["To create a project, go to Projects and click Add"], "must_cite": ["https://help.clockify.me/article/project"]}
+{"q": "What is SSO?", "answers": ["SSO is single sign-on for centralized authentication"], "must_cite": ["https://help.clockify.me/article/sso"]}
+{"q": "How do I approve timesheets as a manager?", "answers": ["Managers can approve timesheets from the Timesheets tab"], "must_cite": ["https://help.clockify.me/article/approval"]}
+{"q": "Can I export reports?", "answers": ["You can export reports to PDF or CSV"], "must_cite": ["https://help.clockify.me/article/reports"]}
+{"q": "What are user roles?", "answers": ["User roles include Admin, Manager, Team Member, and Client"], "must_cite": ["https://help.clockify.me/article/roles"]}
+{"q": "How do I track time?", "answers": ["You can track time using the timer or manual entry"], "must_cite": ["https://help.clockify.me/article/tracking"]}
+{"q": "What is project budget?", "answers": ["A project budget is a cost limit for a project"], "must_cite": ["https://help.clockify.me/article/budget"]}
+{"q": "How do I enable time rounding?", "answers": ["Enable time rounding in Project Settings"], "must_cite": ["https://help.clockify.me/article/rounding"]}
+{"q": "What are recurring time entries?", "answers": ["Recurring entries automatically create time entries on a schedule"], "must_cite": ["https://help.clockify.me/article/recurring"]}
+{"q": "How do I use estimates?", "answers": ["Estimates set expected time for tasks"], "must_cite": ["https://help.clockify.me/article/estimates"]}
+{"q": "What is the audit log?", "answers": ["The audit log tracks all account activity"], "must_cite": ["https://help.clockify.me/article/audit"]}

@@ -1,0 +1,16 @@
+{
+  "timesheet": ["weekly report", "timesheet view", "time entry", "hours submitted"],
+  "time off": ["pto", "vacation", "holiday entry", "leave", "absence", "sick day"],
+  "kiosk": ["time clock", "pin code", "attendance", "punch in", "punch out"],
+  "project manager": ["manager role", "team manager", "project lead"],
+  "billable rate": ["hourly rate", "workspace rate", "member rate", "project rate", "task rate", "billing rate"],
+  "estimate": ["time estimate", "budget estimate", "task-based estimate", "estimated hours"],
+  "sso": ["single sign-on", "saml2", "oauth2", "authentication", "login"],
+  "invoice": ["billing", "invoice creation", "bill", "client invoice"],
+  "scheduling": ["assignments", "forecasting", "workload", "schedule", "team planning"],
+  "audit log": ["activity log", "who did what", "event log", "history"],
+  "reminders": ["timer reminders", "weekly reminders", "notifications", "alerts"],
+  "approval": ["approve timesheet", "manager approval", "workflow", "review"],
+  "rounding": ["time rounding", "round to nearest", "15 minute rounding"],
+  "rates": ["billing rates", "cost rates", "hourly rates", "member rates", "project rates"]
+}
