@@ -133,6 +133,20 @@ def health(deep: int = 0):
         logger.error(f"Index load error: {e}")
     index_normalized = all(_index_normalized.get(ns, False) for ns in _indexes.keys()) if _indexes else None
 
+    # Compute index metrics
+    index_metrics = {}
+    if _indexes:
+        for ns, entry in _indexes.items():
+            index = entry["index"]
+            ntotal = index.ntotal
+            metas = entry["metas"]
+            index_metrics[ns] = {
+                "indexed_vectors": ntotal,
+                "indexed_chunks": len(metas),
+                "vector_dim": entry.get("dim", 768),
+                "normalized": _index_normalized.get(ns, False),
+            }
+
     # Check LLM health if not mock mode
     llm_ok = None
     llm_details = None
@@ -169,13 +183,16 @@ def health(deep: int = 0):
         "ok": ok,
         "namespaces": list(_indexes.keys()),
         "mode": "mock" if MOCK_LLM else "live",
+        "embedding_model": EMBEDDING_MODEL,
         "llm_api_type": os.getenv("LLM_API_TYPE","ollama"),
+        "llm_model": os.getenv("LLM_MODEL", "gpt-oss:20b"),
         "llm_ok": llm_ok,
         "llm_details": llm_details,
         "llm_deep_ok": llm_deep_ok,
         "llm_deep_details": llm_deep_details,
         "index_normalized": index_normalized,
         "index_normalized_by_ns": {ns: _index_normalized.get(ns, None) for ns in _indexes.keys()} if _indexes else {},
+        "index_metrics": index_metrics,
     }
 
 @app.get("/config")
