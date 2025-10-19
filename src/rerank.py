@@ -1,71 +1,82 @@
-#!/usr/bin/env python3
-"""Cross-encoder reranking for result quality improvement."""
-
-import logging
+"""Cross-encoder reranking for improved relevance."""
+from __future__ import annotations
 import os
-from typing import List, Dict
-from dotenv import load_dotenv
-
-try:
-    from sentence_transformers import CrossEncoder
-except ImportError:
-    CrossEncoder = None
-
-load_dotenv()
-
-logger = logging.getLogger(__name__)
-
-USE_RERANKER = os.getenv("USE_RERANKER", "true").lower() == "true"
-RERANKER_MODEL = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-base")
-RERANKER_BATCH_SIZE = int(os.getenv("RERANKER_BATCH_SIZE", "32"))
-RERANKER_TOP_K = int(os.getenv("RERANKER_TOP_K", "5"))
-
-_reranker = None
+from typing import Any
 
 
-def init_reranker():
-    """Load reranker model on first use."""
-    global _reranker
-    if USE_RERANKER and _reranker is None:
-        if not CrossEncoder:
-            logger.warning("sentence-transformers not available; reranking disabled")
+# Module-level singleton for cross-encoder model
+_model: Any = None
+
+
+def load(model_name: str = "BAAI/bge-reranker-large"):
+    """
+    Load cross-encoder model (lazy singleton).
+
+    Args:
+        model_name: Hugging Face model identifier
+
+    Returns:
+        Loaded CrossEncoder instance
+    """
+    global _model
+
+    if _model is None:
+        # Optional: skip reranking if RERANKING_DISABLED env var set
+        if os.getenv("RERANKING_DISABLED") == "true":
             return None
+
         try:
-            _reranker = CrossEncoder(RERANKER_MODEL)
-            logger.info(f"✓ Loaded reranker: {RERANKER_MODEL}")
-        except Exception as e:
-            logger.error(f"Failed to load reranker: {e}")
-    return _reranker
+            from sentence_transformers import CrossEncoder
+
+            _model = CrossEncoder(model_name, trust_remote_code=True)
+        except ImportError:
+            import warnings
+
+            warnings.warn(
+                "sentence_transformers not installed. Reranking disabled. "
+                "Install: pip install sentence_transformers"
+            )
+            _model = False  # Sentinel: tried and failed
+
+    return None if _model is False else _model
 
 
-def rerank(query: str, chunks: List[Dict], top_k: int = RERANKER_TOP_K) -> List[Dict]:
-    """Rerank chunks using cross-encoder."""
-    if not USE_RERANKER or len(chunks) == 0:
-        return chunks
+def rerank(
+    query: str,
+    candidates: list[dict[str, Any]],
+    topk: int = 8
+) -> list[dict[str, Any]]:
+    """
+    Rerank candidates using cross-encoder, with fallback if model unavailable.
 
-    reranker = init_reranker()
-    if not reranker:
-        return chunks
+    Args:
+        query: Search query
+        candidates: List of {"text": str, "meta": {...}, "score": float} dicts
+        topk: Number of results to return
+
+    Returns:
+        Reranked candidates (top-k), sorted by rerank score descending
+    """
+    model = load()
+
+    if model is None:
+        # Model unavailable: fall back to original scoring
+        return sorted(candidates, key=lambda x: x.get("score", 0.0), reverse=True)[:topk]
+
+    # Compute reranking scores
+    pairs = [(query, c["text"]) for c in candidates]
 
     try:
-        # Prepare pairs
-        pairs = [[query, c["text"]] for c in chunks]
-
-        # Score
-        scores = reranker.predict(pairs, batch_size=RERANKER_BATCH_SIZE)
-
-        # Sort by score
-        ranked = sorted(zip(chunks, scores), key=lambda x: x[1], reverse=True)
-
-        # Return top_k with new scores
-        result = []
-        for chunk, score in ranked[:top_k]:
-            chunk["rerank_score"] = float(score)
-            result.append(chunk)
-
-        logger.debug(f"Reranked {len(chunks)} → {len(result)} chunks")
-        return result
-
+        scores = model.predict(pairs).tolist()
     except Exception as e:
-        logger.error(f"Reranking error: {e}")
-        return chunks[:top_k]
+        import warnings
+
+        warnings.warn(f"Reranking failed ({e}). Falling back to original scores.")
+        return sorted(candidates, key=lambda x: x.get("score", 0.0), reverse=True)[:topk]
+
+    # Annotate candidates with rerank score
+    for c, s in zip(candidates, scores):
+        c["rerank_score"] = float(s)
+
+    # Sort by rerank score and return top-k
+    return sorted(candidates, key=lambda x: x.get("rerank_score", 0.0), reverse=True)[:topk]
