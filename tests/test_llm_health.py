@@ -12,9 +12,17 @@ def client():
     return TestClient(app)
 
 
-def test_health_mock_mode(client):
+def test_health_mock_mode():
     """In mock mode, llm_ok should be None."""
     os.environ["MOCK_LLM"] = "true"
+
+    # Force reimport to pick up env changes
+    import importlib
+    import src.server
+    importlib.reload(src.server)
+    from src.server import app as reloaded_app
+    from fastapi.testclient import TestClient
+    client = TestClient(reloaded_app)
 
     resp = client.get("/health")
     assert resp.status_code == 200
