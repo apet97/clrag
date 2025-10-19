@@ -124,11 +124,27 @@ def health():
         ok = False
         logger.error(f"Index load error: {e}")
     index_normalized = all(_index_normalized.get(ns, False) for ns in _indexes.keys()) if _indexes else None
+
+    # Check LLM health if not mock mode
+    llm_ok = None
+    llm_details = None
+    if not MOCK_LLM:
+        try:
+            llm = LLMClient()
+            llm_check = llm.health_check()
+            llm_ok = llm_check.get("ok")
+            llm_details = llm_check.get("details")
+        except Exception as e:
+            llm_ok = False
+            llm_details = f"Error initializing LLM client: {str(e)}"
+
     return {
         "ok": ok,
         "namespaces": list(_indexes.keys()),
         "mode": "mock" if MOCK_LLM else "live",
         "llm_api_type": os.getenv("LLM_API_TYPE","ollama"),
+        "llm_ok": llm_ok,
+        "llm_details": llm_details,
         "index_normalized": index_normalized,
         "index_normalized_by_ns": {ns: _index_normalized.get(ns, None) for ns in _indexes.keys()} if _indexes else {},
     }
@@ -140,6 +156,12 @@ def config():
         "index_mode": os.getenv("INDEX_MODE","single"),
         "embedding_model": EMBEDDING_MODEL,
         "retrieval_k": RETRIEVAL_K,
+        "llm_base_url": os.getenv("LLM_BASE_URL", "http://10.127.0.192:11434"),
+        "llm_chat_path": os.getenv("LLM_CHAT_PATH", "/api/chat"),
+        "llm_tags_path": os.getenv("LLM_TAGS_PATH", "/api/tags"),
+        "llm_timeout_seconds": int(os.getenv("LLM_TIMEOUT_SECONDS", "30")),
+        "llm_api_type": os.getenv("LLM_API_TYPE", "ollama"),
+        "mock_llm": MOCK_LLM,
     }
 
 @app.get("/search", response_model=SearchResponse)
