@@ -34,7 +34,7 @@ def _validate_config() -> None:
     base_url = os.getenv("LLM_BASE_URL", "").strip()
     chat_path = os.getenv("LLM_CHAT_PATH", "").strip()
     tags_path = os.getenv("LLM_TAGS_PATH", "").strip()
-    api_type = os.getenv("LLM_API_TYPE", "").strip().lower()
+    api_type = os.getenv("LLM_API_TYPE", "ollama").strip().lower()
     mock_llm = os.getenv("MOCK_LLM", "false").lower() == "true"
 
     # Validate API type

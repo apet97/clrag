@@ -136,5 +136,6 @@ def test_model_default_is_correct(client):
     # The default should be set in LLMClient
     from src.llm_client import LLMClient
     os.environ.pop("LLM_MODEL", None)  # Remove to test default
+    os.environ["MOCK_LLM"] = "true"  # Use mock to avoid validation requiring real LLM_BASE_URL
     llm = LLMClient()
     assert llm.model == "gpt-oss:20b"
