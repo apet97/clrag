@@ -1,229 +1,422 @@
-# QUICKSTART - Multi-Corpus RAG in 10 Minutes
+# RAG System - Copy-Paste Terminal Guide
 
-Complete setup for Clockify + LangChain dual-corpus retrieval system.
+**Get your RAG chat system running in 5 minutes with copy-paste commands.**
 
-## Prerequisites
-
-- Python 3.9+
-- 8 GB RAM
-- ~2 GB disk
-- Internet (for initial crawl only)
-
-## Step 1: Clone & Setup (3 min)
-
-```bash
-cd /path/to/rag
-python3 -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-## Step 2: Configure (1 min)
-
-```bash
-cp .env.sample .env
-nano .env  # or open in editor
-
-# Critical: Set local LLM endpoint
-# MODEL_BASE_URL=http://127.0.0.1:8000/v1  (vLLM default)
-# or
-# MODEL_BASE_URL=http://127.0.0.1:11434/v1  (Ollama)
-# or leave default if using LM Studio on 1234
-```
-
-## Step 3: Crawl (5-15 min, first time only)
-
-Scrape Clockify Help + LangChain docs, respecting robots.txt.
-
-```bash
-make crawl
-
-# Watch progress in terminal
-# Expected: ~50-100 pages per corpus
-# Files: data/raw/clockify/*.html + data/raw/langchain/*.html
-```
-
-## Step 4: Process (2 min)
-
-Extract markdown, create parent-child chunks.
-
-```bash
-make preprocess chunk
-```
-
-Expected output:
-- `data/clean/{clockify,langchain}/*.md` (markdown with frontmatter)
-- `data/chunks/{clockify.jsonl,langchain.jsonl}` (parent-child chunks)
-
-## Step 5: Index (5-10 min, depends on CPU/GPU)
-
-Build FAISS vector indexes + BM25 full-text indexes.
-
-```bash
-make embed hybrid
-```
-
-Expected output:
-- `index/faiss/{clockify,langchain}/{index.bin,meta.json}` (FAISS)
-- `index/faiss/hybrid/{clockify,langchain}/` (BM25)
-
-## Step 6: Start Server
-
-```bash
-make serve
-
-# Output:
-# Uvicorn running on http://0.0.0.0:7000
-# [Press Ctrl+C to stop]
-```
-
-**Keep this terminal open!** Open new terminal for testing.
-
-## Step 7: Test in New Terminal
-
-### Health Check
-```bash
-curl http://localhost:7000/health
-
-# Expected:
-# {"status":"ok","timestamp":"...","indexes_loaded":2,"namespaces":["clockify","langchain"]}
-```
-
-### Search Clockify
-```bash
-curl 'http://localhost:7000/search?q=timesheet&namespace=clockify&k=5'
-
-# Returns 5 Clockify help chunks about timesheets
-```
-
-### Search LangChain
-```bash
-curl 'http://localhost:7000/search?q=retrievers&namespace=langchain&k=5'
-
-# Returns 5 LangChain doc chunks about retrievers
-```
-
-### Chat with LLM (requires local LLM running!)
-
-**IMPORTANT:** Start your local LLM FIRST:
-
-**Ollama:**
-```bash
-# Terminal A: Start Ollama
-ollama pull orca-mini
-ollama serve
-
-# Terminal B: Your test terminal (keep running)
-# Continue below...
-```
-
-**vLLM:**
-```bash
-# Terminal A: Start vLLM
-python -m vllm.entrypoints.openai.api_server --model TinyLlama-1.1B-Chat-v1.0
-
-# Terminal B: Continue below
-```
-
-**LM Studio:**
-Open LM Studio app, load model, start server. It runs on port 1234 by default.
-
-Now test chat:
-```bash
-curl -X POST http://localhost:7000/chat \
-  -H 'Content-Type: application/json' \
-  -d '{"question":"How do I create a project?","namespace":"clockify","k":5}'
-
-# Expected: Answer with inline [1] citations + sources list
-```
-
-### Swagger UI
-
-Open in browser: `http://localhost:7000/docs`
-
-## Full End-to-End Command
-
-```bash
-# One-liner for impatient users (after setup)
-source .venv/bin/activate && make crawl preprocess chunk embed hybrid && make serve
-```
-
-## What Just Happened?
-
-1. **Scraped** 50-100 pages from each corpus
-2. **Extracted** clean markdown with structure preserved
-3. **Chunked** into parent sections + focused child nodes (parent-child indexing)
-4. **Embedded** each chunk with multilingual E5 model
-5. **Indexed** with FAISS (vector) + Whoosh (BM25)
-6. **Served** multi-corpus RAG API with hybrid search, query rewrites, reranking
-
-## Incremental Updates
-
-To refresh index with new pages:
-
-```bash
-make crawl preprocess chunk embed hybrid
-```
-
-Only fetches changed pages (via ETag/Last-Modified).
-
-## Customization
-
-Edit `.env` before running pipeline:
-
-- `PARENT_CHUNK_TOKENS=3500` – Section size
-- `CHILD_CHUNK_TOKENS=1000` – Chunk size
-- `QUERY_REWRITES=true` – Enable query variants
-- `USE_RERANKER=true` – Enable cross-encoder
-- `HYBRID_SEARCH=true` – Enable BM25
-
-Then restart: `make crawl ... && make serve`
-
-## Local LLM Options
-
-### Ollama (Easiest)
-```bash
-ollama pull orca-mini
-ollama serve
-# Set in .env: MODEL_BASE_URL=http://127.0.0.1:11434/v1
-```
-
-### vLLM (Faster GPU)
-```bash
-pip install vllm
-python -m vllm.entrypoints.openai.api_server --model TinyLlama-1.1B-Chat-v1.0
-# Runs on http://127.0.0.1:8000/v1 (default)
-```
-
-### LM Studio (GUI)
-1. Download https://lmstudio.ai/
-2. Load model (e.g., Orca Mini)
-3. Start local server
-4. Set in .env: `MODEL_BASE_URL=http://127.0.0.1:1234/v1`
-
-## Troubleshooting
-
-### "Index not loaded" error
-→ `make embed hybrid` didn't finish. Re-run it.
-
-### "No HTML files" scraped
-→ Check internet. Verify CRAWL_BASES in .env. Check if domain blocks you.
-
-### Slow embedding
-→ Increase `EMBEDDING_BATCH_SIZE` in .env (e.g., 64). Use GPU if available.
-
-### Chat returns error
-→ Ensure local LLM is running. Test: `curl http://127.0.0.1:8000/v1/models`
-
-### Out of memory
-→ Reduce `EMBEDDING_BATCH_SIZE`. Use smaller embedding model.
-
-## Next
-
-- Full docs: `README.md`
-- Ops guide: `OPERATOR_GUIDE.md`
-- API docs: `http://localhost:7000/docs` (live Swagger)
+This guide is optimized for terminal newbies. Just copy each command block and paste into your terminal.
 
 ---
 
-**You're ready!** 🚀
+## 📋 Prerequisites
+
+Before you start, make sure you have:
+
+- ✅ Git installed
+- ✅ Docker installed (or Python 3.11+)
+- ✅ Ollama running (local or accessible)
+
+---
+
+## 🚀 Option 1: Docker (Recommended - 2 Minutes)
+
+### Step 1: Clone Repository
+
+\`\`\`bash
+git clone https://github.com/apet97/clrag.git
+cd clrag
+\`\`\`
+
+**Expected output:**
+\`\`\`
+Cloning into 'clrag'...
+remote: Enumerating objects...
+...
+Done.
+\`\`\`
+
+---
+
+### Step 2: Copy Environment File
+
+\`\`\`bash
+cp .env.docker .env
+\`\`\`
+
+**Expected output:**
+\`\`\`
+(no output = success)
+\`\`\`
+
+---
+
+### Step 3: Build Docker Image
+
+\`\`\`bash
+docker build -t rag-system:latest .
+\`\`\`
+
+**Expected output:**
+\`\`\`
+Sending build context to Docker daemon  45.09MB
+Step 1/8 : FROM python:3.11-slim
+...
+Successfully tagged rag-system:latest
+\`\`\`
+
+⏱️ **Takes:** 1-2 minutes (first time), cached after that
+
+---
+
+### Step 4: Start Services with Docker Compose
+
+\`\`\`bash
+docker-compose up -d
+\`\`\`
+
+**Expected output:**
+\`\`\`
+Creating network "clrag_rag-network" with driver "bridge"
+Creating rag-ollama  ... done
+Creating rag-system  ... done
+\`\`\`
+
+⏱️ **Takes:** 10-20 seconds
+
+---
+
+### Step 5: Wait and Verify
+
+\`\`\`bash
+sleep 10
+curl -H "x-api-token: change-me" http://localhost:7000/health
+\`\`\`
+
+**Expected output:**
+\`\`\`json
+{"status":"ok","index_loaded":true,"namespaces":["clockify-help"],...}
+\`\`\`
+
+✅ **If you see this, you're running!**
+
+---
+
+### Step 6: Open in Browser
+
+\`\`\`bash
+# macOS
+open http://localhost:7000
+
+# Linux
+xdg-open http://localhost:7000
+
+# Windows (Command Prompt)
+start http://localhost:7000
+\`\`\`
+
+Or manually open: **http://localhost:7000**
+
+---
+
+### Step 7: Use the Chat
+
+1. **Set Token** (Config panel):
+   - Enter: \`change-me\`
+
+2. **Try Search** (Search tab):
+   - Enter: "How do I submit a timesheet?"
+   - See results!
+
+3. **Try Chat** (Chat tab):
+   - Enter: "How do I submit a timesheet?"
+   - See AI answer with citations!
+
+---
+
+### Stop Services (When Done)
+
+\`\`\`bash
+docker-compose down
+\`\`\`
+
+---
+
+## 🚀 Option 2: Native Python (5 Minutes)
+
+### Step 1: Clone Repository
+
+\`\`\`bash
+git clone https://github.com/apet97/clrag.git
+cd clrag
+\`\`\`
+
+---
+
+### Step 2: Create Virtual Environment
+
+\`\`\`bash
+# macOS/Linux
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Windows (Command Prompt)
+python -m venv .venv
+.venv\Scripts\activate
+
+# Windows (PowerShell)
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+\`\`\`
+
+**Expected output:**
+\`\`\`
+(.venv) user@laptop:clrag$
+\`\`\`
+
+(Notice \`(.venv)\` at start of prompt)
+
+---
+
+### Step 3: Install Dependencies
+
+\`\`\`bash
+pip install -r requirements.txt
+\`\`\`
+
+⏱️ **Takes:** 2-3 minutes
+
+---
+
+### Step 4: Configure .env
+
+\`\`\`bash
+cp .env.sample .env
+\`\`\`
+
+Edit \`.env\` and set:
+\`\`\`
+API_TOKEN=change-me
+LLM_BASE_URL=http://localhost:11434
+\`\`\`
+
+---
+
+### Step 5: Start Server
+
+\`\`\`bash
+python -m src.server
+\`\`\`
+
+**Expected output:**
+\`\`\`
+INFO | src.server:startup:... ✓ Ollama embedding model ready: dim=768
+INFO | src.server:startup:... ✓ Response cache initialized
+INFO | src.server:startup:... ✅ RAG System startup complete
+\`\`\`
+
+✅ **If you see this, you're running!**
+
+---
+
+### Step 6: Open Browser (New Terminal)
+
+\`\`\`bash
+# macOS
+open http://localhost:7000
+
+# Linux
+xdg-open http://localhost:7000
+
+# Windows (PowerShell)
+Start-Process "http://localhost:7000"
+\`\`\`
+
+Or manually: **http://localhost:7000**
+
+---
+
+### Step 7: Stop Server
+
+In terminal where server is running:
+
+\`\`\`bash
+Ctrl+C
+\`\`\`
+
+Then:
+\`\`\`bash
+deactivate
+\`\`\`
+
+---
+
+## 🧪 Test Your Setup
+
+### Test Health
+
+\`\`\`bash
+curl -H "x-api-token: change-me" http://localhost:7000/health
+\`\`\`
+
+### Test Search
+
+\`\`\`bash
+curl -H "x-api-token: change-me" \
+  "http://localhost:7000/search?q=timesheet&k=3"
+\`\`\`
+
+### Test Chat
+
+\`\`\`bash
+curl -X POST -H "x-api-token: change-me" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"How do I submit a timesheet?","k":3}' \
+  http://localhost:7000/chat
+\`\`\`
+
+---
+
+## 📊 Monitor & Logs
+
+### Docker Logs
+
+\`\`\`bash
+docker-compose logs -f
+\`\`\`
+
+### Docker Status
+
+\`\`\`bash
+docker-compose ps
+\`\`\`
+
+---
+
+## 🔗 Quick Commands
+
+### Docker
+
+\`\`\`bash
+# Start
+docker-compose up -d
+
+# Stop
+docker-compose down
+
+# Logs
+docker-compose logs -f
+
+# Restart
+docker-compose restart
+
+# Rebuild
+docker-compose up -d --build
+\`\`\`
+
+### Python
+
+\`\`\`bash
+# Activate
+source .venv/bin/activate
+
+# Install
+pip install -r requirements.txt
+
+# Start
+python -m src.server
+
+# Stop
+Ctrl+C
+
+# Deactivate
+deactivate
+\`\`\`
+
+---
+
+## 🌐 Access Points
+
+| Resource | URL |
+|----------|-----|
+| Web UI | http://localhost:7000 |
+| Search API | http://localhost:7000/search?q=... |
+| Chat API | http://localhost:7000/chat |
+| Health | http://localhost:7000/health |
+| Metrics | http://localhost:7000/metrics |
+
+---
+
+## 🆘 Troubleshooting
+
+### Docker not found
+
+\`\`\`bash
+# Install Docker Desktop or:
+docker --version
+\`\`\`
+
+### Port 7000 in use
+
+\`\`\`bash
+# Use different port
+docker run -p 8000:7000 rag-system:latest
+# Visit: http://localhost:8000
+\`\`\`
+
+### Connection refused
+
+\`\`\`bash
+# Check if Ollama running
+curl http://localhost:11434/api/tags
+\`\`\`
+
+### Out of memory
+
+\`\`\`bash
+# Increase Docker memory:
+# Docker Desktop → Settings → Resources → Memory (4GB+)
+# Then restart: docker-compose restart
+\`\`\`
+
+### Python version wrong
+
+\`\`\`bash
+python3 --version
+# Should be 3.11 or higher
+\`\`\`
+
+---
+
+## 📋 One-Liner Setup (Docker)
+
+Copy-paste entire block:
+
+\`\`\`bash
+git clone https://github.com/apet97/clrag.git && cd clrag && \
+cp .env.docker .env && \
+docker build -t rag-system:latest . && \
+docker-compose up -d && \
+sleep 10 && \
+echo "✅ Running at http://localhost:7000" && \
+curl -H "x-api-token: change-me" http://localhost:7000/health
+\`\`\`
+
+---
+
+## 📋 One-Liner Setup (Python)
+
+\`\`\`bash
+git clone https://github.com/apet97/clrag.git && cd clrag && \
+python3 -m venv .venv && \
+source .venv/bin/activate && \
+pip install -r requirements.txt && \
+cp .env.sample .env && \
+echo "✅ Setup complete. Run: python -m src.server"
+\`\`\`
+
+---
+
+## 🎉 You're All Set!
+
+Your RAG chat system is running at: **http://localhost:7000**
+
+Enjoy! 🚀
+
