@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clockify RAG - Search & Chat</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🔍 Clockify RAG</h1>
+            <p>Search & Chat with Clockify Help Articles</p>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="chat">💬 Chat</button>
+            <button class="tab-btn" data-tab="articles">📄 Articles</button>
+            <button class="tab-btn" data-tab="about">ℹ️ About</button>
+        </nav>
+
+        <!-- Tab Content -->
+        <main class="tabs-content">
+            <!-- Chat Tab -->
+            <div id="chat" class="tab-panel active">
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message assistant">
+                            <div class="message-content">
+                                👋 Hello! I'm your Clockify assistant. Ask me anything about Clockify Help.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chat-input-area">
+                        <input
+                            type="text"
+                            id="chatInput"
+                            placeholder="Ask a question..."
+                            class="chat-input"
+                            autocomplete="off"
+                        >
+                        <button id="chatSendBtn" class="btn btn-primary">Send</button>
+                    </div>
+
+                    <div class="sources-panel" id="sourcesPanel" style="display: none;">
+                        <h3>📚 Sources</h3>
+                        <div id="sourcesList"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Articles Tab -->
+            <div id="articles" class="tab-panel">
+                <div class="articles-container">
+                    <div class="search-area">
+                        <input
+                            type="text"
+                            id="articlesInput"
+                            placeholder="Search articles..."
+                            class="search-input"
+                            autocomplete="off"
+                        >
+                        <button id="articleSearchBtn" class="btn btn-primary">Search</button>
+                    </div>
+
+                    <div class="filters">
+                        <label>
+                            <input type="checkbox" id="filterHighConf" checked>
+                            High Confidence Only
+                        </label>
+                    </div>
+
+                    <div class="articles-results" id="articlesResults">
+                        <p class="empty-state">Search for articles to get started</p>
+                    </div>
+
+                    <div class="pagination" id="pagination" style="display: none;">
+                        <button id="prevBtn" class="btn btn-secondary">← Previous</button>
+                        <span id="pageInfo"></span>
+                        <button id="nextBtn" class="btn btn-secondary">Next →</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- About Tab -->
+            <div id="about" class="tab-panel">
+                <div class="about-container">
+                    <h2>About Clockify RAG</h2>
+                    <p>This is a retrieval-augmented generation (RAG) system for Clockify Help documentation.</p>
+
+                    <h3>Features:</h3>
+                    <ul>
+                        <li>💬 <strong>Smart Chat</strong> - Ask questions and get AI-powered answers with citations</li>
+                        <li>📄 <strong>Article Search</strong> - Find relevant help articles instantly</li>
+                        <li>🎯 <strong>Confidence Scoring</strong> - Know how confident we are in our results</li>
+                        <li>🚀 <strong>Fast & Accurate</strong> - Hybrid search with semantic understanding</li>
+                    </ul>
+
+                    <h3>How it works:</h3>
+                    <ol>
+                        <li><strong>Query Optimization</strong> - Your questions are analyzed for intent and entities</li>
+                        <li><strong>Multi-stage Retrieval</strong> - Articles are searched using semantic and keyword methods</li>
+                        <li><strong>Confidence Scoring</strong> - Results are scored for quality and relevance</li>
+                        <li><strong>AI Generation</strong> - Answers are synthesized from top results with citations</li>
+                    </ol>
+
+                    <h3>Tips for better results:</h3>
+                    <ul>
+                        <li>Be specific: "How do I track time?" vs "time"</li>
+                        <li>Use natural language: Questions work better than keywords</li>
+                        <li>Look for confidence indicators (🟢 high, 🟡 medium, 🔴 low)</li>
+                        <li>Check the sources to verify answers</li>
+                    </ul>
+
+                    <h3>Status:</h3>
+                    <div id="statusInfo" class="status-box">
+                        <p>Loading system status...</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Powered by Advanced Multi-Corpus RAG Stack | Powered by Clockify Help</p>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/api.js"></script>
+    <script src="js/chat.js"></script>
+    <script src="js/articles.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
