@@ -89,11 +89,18 @@ The repository includes pre-cleaned, verified Clockify help pages in `data/clean
 
 If you want fresh data from the web:
 
-1. **Step 1: Scrape (src.scrape)**
-   - Crawls clockify.me/help and saves pages to `data/raw/clockify/`
-   - Time: 5-10 minutes to fetch 500+ pages
+1. **Step 1: Scrape (src.scrape)** - COMPREHENSIVE COVERAGE
+   - Crawls clockify.me/help and saves ALL pages to `data/raw/clockify/`
+   - Time: 15-20 minutes to fetch 2000+ pages (comprehensive coverage)
    - Command: `python -m src.scrape`
-   - ✅ Filters to ONLY help articles (excludes marketing, non-English variants)
+   - ✅ **Smart link extraction:**
+     - Main content links + Navigation menus
+     - Breadcrumb paths + Sidebar links
+     - Related articles + Resource sections
+     - Sitemap alternates + Deep traversal
+   - ✅ **Filters to ONLY help articles** (excludes marketing, non-English variants)
+   - ✅ **8x parallel crawling** for speed
+   - ✅ **Deep resource discovery** (crawl depth: 5 levels)
 
 2. **Step 2: Ingest (src.ingest)**
    - Processes HTML and creates embeddings with Ollama
