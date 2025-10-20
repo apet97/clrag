@@ -1,63 +1,53 @@
 """
-Query encoding with caching, normalization, and thread-safe model loading.
+Query encoding with Ollama via /api/embeddings endpoint.
+L2 normalization and LRU caching. Deterministic, offline-first.
 
-AXIOM 3: Use sentence-transformers "intfloat/multilingual-e5-base".
-Normalize vectors to unit length before indexing and querying.
+AXIOM 3: Normalize vectors to unit length before indexing and querying.
 """
 
 import os
-import threading
+import requests
 from functools import lru_cache
-from typing import Optional
-
 import numpy as np
 from loguru import logger
-from sentence_transformers import SentenceTransformer
 
+OLLAMA_BASE_URL = os.getenv("LLM_BASE_URL", "http://10.127.0.192:11434")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 
-# Thread-safe global model
-_model_lock = threading.Lock()
-_model: Optional[SentenceTransformer] = None
-
-
-def _get_model() -> SentenceTransformer:
-    """Lazy-load embedding model with thread safety."""
-    global _model
-    if _model is None:
-        with _model_lock:
-            if _model is None:
-                model_name = os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-base")
-                logger.info(f"Loading embedding model: {model_name}")
-                _model = SentenceTransformer(model_name)
-                _model.max_seq_length = 512
-                logger.info(f"Model loaded. Embedding dimension: {_model.get_sentence_embedding_dimension()}")
-    return _model
+logger.info(f"Encoding: Ollama at {OLLAMA_BASE_URL}, model {EMBEDDING_MODEL}")
 
 
 @lru_cache(maxsize=512)
 def _encode_cached(text: str) -> tuple:
     """
-    Encode text to normalized embedding with LRU cache.
-    Cache uses tuple (cached numpy arrays not allowed, so return as tuple).
+    Encode text via Ollama /api/embeddings with LRU cache.
+    Returns tuple (for hashable caching). L2-normalized.
     """
-    model = _get_model()
-    # Encode with normalization
-    embedding = model.encode(
-        [text.strip()],
-        convert_to_numpy=True,
-        normalize_embeddings=True  # AXIOM 3: Normalize to unit vectors
-    )[0]
-    # Verify normalization
-    norm = np.linalg.norm(embedding)
-    if not (0.99 <= norm <= 1.01):  # Allow small float error
-        embedding = embedding / (norm + 1e-8)
-    return tuple(embedding)
+    try:
+        url = f"{OLLAMA_BASE_URL}/api/embeddings"
+        payload = {"model": EMBEDDING_MODEL, "prompt": text.strip()}
+        resp = requests.post(url, json=payload, timeout=30)
+        if resp.status_code != 200:
+            logger.error(f"Ollama /api/embeddings: {resp.status_code} {resp.text[:200]}")
+            raise RuntimeError(f"Ollama failed: {resp.status_code}")
+
+        data = resp.json()
+        embedding = np.array(data.get("embedding"), dtype=np.float32)
+
+        # L2 normalize (AXIOM 3)
+        norm = np.linalg.norm(embedding)
+        if norm > 0:
+            embedding = embedding / norm
+
+        return tuple(embedding)
+    except Exception as e:
+        logger.error(f"Encoding error: {e}")
+        raise
 
 
 def encode_query(text: str) -> np.ndarray:
     """
-    Encode a single query string to normalized embedding.
-    Uses LRU cache to avoid re-encoding.
+    Encode single query with LRU cache + L2 normalization.
     """
     cached_tuple = _encode_cached(text.strip())
     return np.array(cached_tuple, dtype=np.float32)
@@ -65,48 +55,55 @@ def encode_query(text: str) -> np.ndarray:
 
 def encode_texts(texts: list[str]) -> np.ndarray:
     """
-    Encode multiple texts to normalized embeddings (batch).
+    Batch encode texts via Ollama (no cache, deterministic, L2-normalized).
     Returns matrix of shape (len(texts), embedding_dim).
     """
-    model = _get_model()
-    texts_stripped = [t.strip() for t in texts]
-    embeddings = model.encode(
-        texts_stripped,
-        convert_to_numpy=True,
-        normalize_embeddings=True  # AXIOM 3: Normalize
-    )
-    return embeddings.astype(np.float32)
+    try:
+        url = f"{OLLAMA_BASE_URL}/api/embeddings"
+        embeddings = []
 
+        for text in texts:
+            payload = {"model": EMBEDDING_MODEL, "prompt": text.strip()}
+            resp = requests.post(url, json=payload, timeout=30)
+            if resp.status_code != 200:
+                logger.error(f"Ollama batch embedding: {resp.status_code}")
+                raise RuntimeError(f"Ollama failed: {resp.status_code}")
 
-def get_embedding_dimension() -> int:
-    """Return embedding dimension for FAISS index setup."""
-    model = _get_model()
-    return model.get_sentence_embedding_dimension()
+            data = resp.json()
+            embedding = np.array(data.get("embedding"), dtype=np.float32)
+
+            # L2 normalize (AXIOM 3)
+            norm = np.linalg.norm(embedding)
+            if norm > 0:
+                embedding = embedding / norm
+
+            embeddings.append(embedding)
+
+        return np.array(embeddings, dtype=np.float32)
+    except Exception as e:
+        logger.error(f"Batch encoding error: {e}")
+        raise
 
 
 def warmup():
-    """Warmup embedding model with anchor queries to compile kernels."""
-    logger.info("Warming up embedding model...")
-    anchor_terms = [
-        "timesheet",
-        "project",
-        "kiosk",
-        "invoice",
-        "time off",
-        "billable rate",
-        "estimate",
-        "sso",
-    ]
+    """Test Ollama connectivity and embedding model readiness."""
+    logger.info(f"Testing Ollama at {OLLAMA_BASE_URL}...")
     try:
-        for term in anchor_terms:
-            _ = encode_query(term)
-        logger.info(f"Warmup complete. LRU cache size: {_encode_cached.cache_info().currsize}")
+        url = f"{OLLAMA_BASE_URL}/api/embeddings"
+        payload = {"model": EMBEDDING_MODEL, "prompt": "test"}
+        resp = requests.post(url, json=payload, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            dim = len(data.get("embedding", []))
+            logger.info(f"✓ Ollama ready: {EMBEDDING_MODEL} (dim={dim})")
+        else:
+            logger.warning(f"Ollama status {resp.status_code}")
     except Exception as e:
-        logger.warning(f"Warmup failed: {e}")
+        logger.warning(f"Ollama test failed: {e}")
 
 
 if __name__ == "__main__":
-    # Test normalization
+    # Test single query
     vec = encode_query("test query")
     norm = np.linalg.norm(vec)
     print(f"Single query embedding norm: {norm:.6f} (should be ~1.0)")

@@ -1,5 +1,9 @@
 PYTHON ?= python
 
+ingest:
+	@echo "Running Clockify Help ingestion (clockify-help namespace)..."
+	$(PYTHON) -m src.ingest
+
 serve:
 	uvicorn src.server:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-7000}
 
@@ -29,4 +33,4 @@ eval-axioms:
 	@echo "Running comprehensive RAG Standard v1 evaluation (AXIOM 1-9)..."
 	$(PYTHON) eval/run_eval.py http://localhost:7000
 
-.PHONY: serve test-llm test-rag eval eval-full eval-health eval-glossary eval-axioms
+.PHONY: ingest serve test-llm test-rag eval eval-full eval-health eval-glossary eval-axioms
