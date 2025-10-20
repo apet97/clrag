@@ -69,8 +69,11 @@ function addChatMessage(text, sender) {
     const content = document.createElement('div');
     content.className = 'message-content';
 
-    // Simple markdown-like formatting
-    let formattedText = text
+    // Sanitize text to prevent XSS while allowing markdown formatting
+    const sanitized = sanitizeText(text);
+
+    // Apply safe markdown-like formatting
+    let formattedText = sanitized
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>')
         .replace(/\n/g, '<br>');
@@ -80,6 +83,16 @@ function addChatMessage(text, sender) {
 
     document.getElementById('chatMessages').appendChild(messageEl);
     document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+}
+
+/**
+ * Sanitize text to prevent XSS attacks
+ * Escapes HTML entities to prevent script injection
+ */
+function sanitizeText(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function displaySources(sources) {

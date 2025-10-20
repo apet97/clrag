@@ -87,16 +87,31 @@ function createArticleCard(article) {
     const level = confidence > 75 ? 'high' : confidence > 50 ? 'medium' : 'low';
     const emoji = confidence > 75 ? '🟢' : confidence > 50 ? '🟡' : '🔴';
 
+    // Sanitize text fields to prevent XSS
+    const title = sanitizeHtml(article.title || 'Untitled');
+    const content = sanitizeHtml((article.content || 'No content').substring(0, 150));
+    const namespace = sanitizeHtml(article.namespace || 'unknown');
+
     return `
         <div class="article-card" onclick="openArticle('${encodeURIComponent(JSON.stringify(article))}')">
-            <h3>${article.title || 'Untitled'}</h3>
-            <p>${(article.content || 'No content').substring(0, 150)}...</p>
+            <h3>${title}</h3>
+            <p>${content}...</p>
             <div class="article-meta">
                 <span class="confidence-badge confidence-${level}">${emoji} ${confidence.toFixed(0)}%</span>
-                <span style="font-size: 0.75rem;">${article.namespace || 'unknown'}</span>
+                <span style="font-size: 0.75rem;">${namespace}</span>
             </div>
         </div>
     `;
+}
+
+/**
+ * Sanitize HTML to prevent XSS attacks
+ * Escapes HTML entities
+ */
+function sanitizeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function openArticle(encodedData) {

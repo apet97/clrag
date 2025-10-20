@@ -6,6 +6,7 @@ from uuid import uuid4
 import numpy as np
 from fastapi import FastAPI, HTTPException, Request, Header
 from fastapi.responses import ORJSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, validator
 from loguru import logger
 
@@ -18,6 +19,8 @@ from src.query_expand import expand
 from src.rerank import rerank
 from src.cache import init_cache, get_cache
 from src.search_improvements import detect_query_type, get_adaptive_k_multiplier, log_query_analysis
+from src.query_optimizer import get_optimizer
+from src.scoring import get_scorer
 
 API_TOKEN = os.getenv("API_TOKEN", "change-me")
 HOST = os.getenv("API_HOST", "0.0.0.0")
@@ -449,6 +452,19 @@ def search(q: str, k: int | None = None, namespace: str | None = None, request: 
         # AXIOM 5: Optional reranking (silent fallback if not available)
         results = rerank(q, results_dedup, k) if results_dedup else []
 
+        # NEW: Apply query optimization and confidence scoring
+        optimizer = get_optimizer()
+        scorer = get_scorer()
+
+        # Analyze query for optimization
+        query_analysis = optimizer.analyze(q)
+        query_entities = query_analysis.get("entities", [])
+        query_type = query_analysis.get("type", "general")
+
+        # Score and rank results by confidence
+        if results:
+            results = scorer.batch_score(results, q, query_entities, query_type)
+
         # Add sequential 1-based rank to each result
         for i, r in enumerate(results, start=1):
             r["rank"] = i
@@ -596,6 +612,16 @@ def chat(req: ChatRequest, request: Request, x_api_token: str | None = Header(de
     except Exception as e:
         logger.error(f"Chat failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --------- Mount Static Files for Web UI ---------
+# Serve the web UI from public/ directory
+PUBLIC_DIR = Path(__file__).parent.parent / "public"
+if PUBLIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(PUBLIC_DIR), html=True), name="public")
+    logger.info(f"Mounted static files from {PUBLIC_DIR}")
+else:
+    logger.warning(f"Public directory not found at {PUBLIC_DIR}, web UI will not be served")
 
 if __name__ == "__main__":
     import uvicorn
