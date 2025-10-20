@@ -18,10 +18,10 @@ import requests
 from loguru import logger
 
 # Config
-HELP_DIR = Path(os.getenv("HELP_DIR", "data/clockify_help"))
+HELP_DIR = Path(os.getenv("HELP_DIR", "data/raw/clockify"))
 OLLAMA_BASE_URL = os.getenv("LLM_BASE_URL", "http://10.127.0.192:11434")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
-NAMESPACE = "clockify-help"
+NAMESPACE = "clockify"
 INDEX_ROOT = Path("index/faiss") / NAMESPACE
 CHUNK_TARGET_TOKENS = int(os.getenv("CHUNK_TARGET_TOKENS", "512"))
 CHUNK_OVERLAP_TOKENS = int(os.getenv("CHUNK_OVERLAP_TOKENS", "64"))
