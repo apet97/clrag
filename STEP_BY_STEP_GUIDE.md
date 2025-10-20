@@ -1,16 +1,19 @@
-# Clockify RAG - Complete Step-by-Step Guide
+# Advanced Multi-Corpus RAG Stack - Complete Step-by-Step Guide
 
-**Get up and running with detailed instructions!**
+**Complete guide to launching the production-ready RAG system locally**
 
 ---
 
 ## Table of Contents
 
 1. [Initial Setup (First Time)](#initial-setup-first-time)
-2. [Local Development](#local-development)
-3. [Using the API](#using-the-api)
-4. [Docker Deployment](#docker-deployment)
-5. [Monitoring & Debugging](#monitoring--debugging)
+2. [Running the Full Pipeline](#running-the-full-pipeline)
+3. [Testing the API](#testing-the-api)
+4. [Local LLM Setup](#local-llm-setup)
+5. [Using the API](#using-the-api)
+6. [Docker Deployment](#docker-deployment)
+7. [Troubleshooting](#troubleshooting)
+8. [Advanced Usage](#advanced-usage)
 
 ---
 
@@ -23,44 +26,52 @@
 # Install Homebrew if not already installed
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# Install Python 3.11+
-brew install python@3.11
+# Install Python 3.9+
+brew install python@3.9
 
 # Install Git
 brew install git
 
-# Install Ollama
+# Install Ollama (for local LLM)
 brew install ollama
+
+# (Optional) Install make for convenience
+brew install make
 ```
 
 **On Linux (Ubuntu/Debian):**
 ```bash
 # Update package manager
 sudo apt update
-sudo apt upgrade
+sudo apt upgrade -y
 
-# Install Python 3.11+
-sudo apt install python3.11 python3.11-venv python3-pip
+# Install Python 3.9+
+sudo apt install -y python3.9 python3.9-venv python3-pip
 
 # Install Git
-sudo apt install git
+sudo apt install -y git
 
 # Install Ollama
 curl https://ollama.ai/install.sh | sh
+
+# (Optional) Install make
+sudo apt install -y make
 ```
 
-**On Windows:**
+**On Windows (PowerShell as Administrator):**
 ```powershell
-# Install Python from https://www.python.org/downloads/
-# Download Python 3.11+ installer
+# Install Python 3.9+ from https://www.python.org/downloads/
 # During installation, CHECK "Add Python to PATH"
 
 # Install Git from https://git-scm.com/download/win
 
 # Install Ollama from https://ollama.ai/download
+
+# (Optional) Install make via chocolatey
+choco install make
 ```
 
-### Step 2: Clone the Repository
+### Step 2: Clone Repository
 
 ```bash
 # Navigate to your desired directory
@@ -72,16 +83,16 @@ git clone https://github.com/apet97/clrag.git
 # Enter the directory
 cd clrag
 
-# Verify you're in the right place
+# Verify structure
 ls -la
-# Should show: src/, clockify-help/, index/, QUICK_START.md, etc.
+# Should show: src/, data/, index/, Makefile, requirements.txt, README.md, etc.
 ```
 
-### Step 3: Create Virtual Environment
+### Step 3: Create Python Virtual Environment
 
 ```bash
 # Create virtual environment
-python3 -m venv .venv
+python3.9 -m venv .venv
 
 # Activate it
 # On macOS/Linux:
@@ -89,544 +100,700 @@ source .venv/bin/activate
 
 # On Windows:
 # .venv\Scripts\activate
+
+# You should see (.venv) in your terminal prompt
 ```
 
-**You should see `(.venv)` in your terminal prompt**
-
-### Step 4: Install Dependencies
+### Step 4: Install Python Dependencies
 
 ```bash
 # Upgrade pip
 pip install --upgrade pip
 
-# Install all requirements
+# Install all dependencies
 pip install -r requirements.txt
 
 # Verify installation
-python -c "import faiss; import ollama; print('✓ All dependencies installed')"
+python -c "import faiss; import httpx; print('✓ Dependencies installed')"
 ```
 
-### Step 5: Start Ollama Service
-
-**Keep this running in a separate terminal!**
+### Step 5: Configure Environment
 
 ```bash
-# Terminal 1: Start Ollama
-ollama serve
+# Copy example configuration
+cp .env.sample .env
 
-# Wait for output like:
-# "Listening on 127.0.0.1:11434"
-```
-
-### Step 6: Create Configuration File
-
-```bash
-# Copy the example configuration
-cp .env.example .env
-
-# On macOS/Linux, edit it:
+# Edit configuration (important!)
+# On macOS/Linux:
 nano .env
 
-# On Windows, use Notepad:
+# On Windows:
 # notepad .env
 
-# For local setup, the defaults are fine
-# Just verify these values:
-# API_PORT=8000
-# LLM_BASE_URL=http://localhost:11434
-# EMBEDDING_MODEL=nomic-embed-text:latest
+# Key configuration options to check/modify:
+# CRAWL_BASES=https://clockify.me/help,https://python.langchain.com/docs
+# DOMAINS_WHITELIST=clockify.me,langchain.com
+# PARENT_CHILD_INDEXING=true
+# HYBRID_SEARCH=true
+# QUERY_REWRITES=true
+# USE_RERANKER=true
+# MODEL_BASE_URL=http://127.0.0.1:8000/v1
+# MODEL_NAME=oss20b
+# EMBEDDING_MODEL=intfloat/multilingual-e5-base
 ```
 
-### Step 7: Build FAISS Index
-
-**Run this once to build the searchable index:**
-
+Example `.env` file:
 ```bash
-# Terminal 2: Build index
-source .venv/bin/activate  # If not already activated
-python -m src.ingest_from_jsonl
+# LLM Configuration (REQUIRED - must be running before pipeline)
+MODEL_BASE_URL=http://127.0.0.1:8000/v1
+MODEL_API_KEY=sk-local-or-empty
+MODEL_NAME=oss20b
+MODEL_MAX_TOKENS=1000
+MODEL_TEMPERATURE=0.7
 
-# Output should show:
-# "Loaded 2221 records from clockify-help/clockify_help.jsonl"
-# "Building FAISS index from 2221 records..."
-# "Embedding:  [Progress bar]..."
-# "✅ Index saved: index/faiss/clockify-improved/index.bin"
-# "INGESTION COMPLETE"
+# Embedding Configuration
+EMBEDDING_MODEL=intfloat/multilingual-e5-base
+EMBEDDING_BATCH_SIZE=32
+EMBEDDING_POOL_SIZE=4
 
-# This takes 10-30 minutes depending on your hardware
+# Crawling Configuration
+CRAWL_BASES=https://clockify.me/help,https://python.langchain.com/docs
+DOMAINS_WHITELIST=clockify.me,langchain.com
+CRAWL_ALLOW_OVERRIDE=false
+
+# Pipeline Features
+PARENT_CHILD_INDEXING=true
+HYBRID_SEARCH=true
+QUERY_REWRITES=true
+USE_RERANKER=true
+
+# Logging
+DEBUG=false
 ```
 
 ---
 
-## Local Development
+## Local LLM Setup
 
-### Step 1: Start the API Server
+**IMPORTANT: Your local LLM must be running BEFORE you start the pipeline!**
 
-**Terminal 3: Start the API**
+### Option 1: Ollama (Recommended)
 
+**Terminal 1 - Start Ollama:**
 ```bash
-# Activate virtual environment (if not already)
-source .venv/bin/activate
-
-# Set the port (optional, defaults to 8000)
-export API_PORT=8000
-
-# Start the server
-python -m src.server
+# Start Ollama service
+ollama serve
 
 # You should see:
-# "Starting Clockify RAG API server..."
-# "Listening on http://0.0.0.0:8000"
+# Listening on 127.0.0.1:11434
+# Keep this terminal open!
 ```
 
-### Step 2: Verify Server is Running
-
-**Terminal 4: Test the API**
-
+**Terminal 2 - Pull and run a model:**
 ```bash
-# Check health
-curl http://localhost:8000/health
+# Pull a model (oss20b recommended)
+ollama pull oss20b
 
-# Expected response:
-# {"status": "healthy", "index_loaded": true, "articles_indexed": 300}
+# Or pull alternatives:
+ollama pull mistral       # Smaller, faster
+ollama pull neural-chat   # Good balance
+ollama pull orca-mini     # Very small
+
+# Create OpenAI-compatible endpoint (if not auto-created)
+# Ollama defaults to http://127.0.0.1:11434/v1
 ```
 
-### Step 3: Perform Your First Search
+**Update .env for Ollama:**
+```bash
+MODEL_BASE_URL=http://127.0.0.1:11434/v1
+MODEL_NAME=oss20b
+```
+
+### Option 2: vLLM (Faster inference)
 
 ```bash
-# Search for something
-curl "http://localhost:8000/search?q=how+do+i+track+time"
+# Install vLLM
+pip install vllm
 
-# Or use a more complex example
-curl "http://localhost:8000/search?q=create+project&k=5"
+# Start server (Terminal 1)
+python -m vllm.entrypoints.openai.api_server \
+  --model TinyLlama-1.1B-Chat-v1.0 \
+  --port 8000
+
+# Update .env:
+MODEL_BASE_URL=http://127.0.0.1:8000/v1
+MODEL_NAME=TinyLlama-1.1B-Chat-v1.0
+```
+
+### Option 3: LM Studio (GUI)
+
+1. Download from https://lmstudio.ai/
+2. Load a model (e.g., oss20b)
+3. Start OpenAI-compatible server (default: http://127.0.0.1:1234/v1)
+4. Update .env:
+```bash
+MODEL_BASE_URL=http://127.0.0.1:1234/v1
+```
+
+---
+
+## Running the Full Pipeline
+
+### Quick Start (All-in-One)
+
+**Terminal 2 - Run entire pipeline:**
+```bash
+# Activate virtual environment
+source .venv/bin/activate
+
+# Run full pipeline (crawl → preprocess → chunk → embed → hybrid)
+# This may take 15-30 minutes on first run
+make crawl preprocess chunk embed hybrid
+
+# Expected output:
+# [INFO] Crawling https://clockify.me/help ...
+# [INFO] Scraped 300 articles
+# [INFO] Preprocessing HTML to Markdown...
+# [INFO] Creating parent-child chunks...
+# [INFO] Building FAISS indexes...
+# [INFO] Building BM25 indexes...
+# [SUCCESS] Pipeline complete!
+```
+
+### Step-by-Step (Individual Steps)
+
+**Step 1: Crawl articles**
+```bash
+source .venv/bin/activate
+make crawl
+
+# Expected output:
+# [INFO] Starting crawl for 2 namespaces
+# [INFO] Discovered 600+ URLs
+# [INFO] Scraped 300+ articles
+# Data saved to: data/raw/clockify/, data/raw/langchain/
+```
+
+**Step 2: Preprocess HTML to Markdown**
+```bash
+make preprocess
+
+# Expected output:
+# [INFO] Converting 300+ HTML files to Markdown
+# [INFO] Extracting frontmatter (title, URL, section)
+# Data saved to: data/clean/clockify/, data/clean/langchain/
+```
+
+**Step 3: Create parent-child chunks**
+```bash
+make chunk
+
+# Expected output:
+# [INFO] Creating parent-child nodes
+# [INFO] Generated 2500+ chunks
+# Data saved to: data/chunks/*.jsonl
+```
+
+**Step 4: Build FAISS vector indexes**
+```bash
+# IMPORTANT: Your local LLM must be running!
+make embed
+
+# Expected output:
+# [INFO] Embedding 2500+ chunks with intfloat/multilingual-e5-base
+# [INFO] Building FAISS indexes for 2 namespaces
+# [INFO] Index size: ~100 MB per namespace
+# Data saved to: index/faiss/
+# This step takes 10-20 minutes depending on hardware
+```
+
+**Step 5: Build BM25 hybrid indexes**
+```bash
+make hybrid
+
+# Expected output:
+# [INFO] Building BM25 indexes via whoosh
+# [INFO] Created indexes for 2 namespaces
+# Data saved to: index/hybrid/
+```
+
+---
+
+## Testing the API
+
+### Terminal 3 - Start the Server
+
+```bash
+source .venv/bin/activate
+make serve
+
+# Expected output:
+# [INFO] Starting Clockify RAG API server
+# [INFO] Listening on http://0.0.0.0:7000
+# [INFO] Health: HEALTHY
+# [INFO] Loaded 2 namespaces: clockify, langchain
+
+# Keep this terminal open!
+```
+
+### Testing Health Endpoint
+
+**Terminal 4 - Test health:**
+```bash
+curl http://localhost:7000/health
 
 # Expected response:
 # {
-#   "query": "how do i track time",
+#   "status": "healthy",
+#   "namespaces": ["clockify", "langchain"],
+#   "indexes_loaded": 2,
+#   "vector_index_size_mb": 200,
+#   "last_crawl": "2025-10-20T18:30:00Z"
+# }
+```
+
+### Test Basic Search
+
+```bash
+# Search Clockify namespace
+curl 'http://localhost:7000/search?q=timesheet&namespace=clockify&k=5'
+
+# Expected response:
+# {
+#   "query": "timesheet",
+#   "namespace": "clockify",
 #   "results": [
 #     {
-#       "id": "doc_id",
-#       "title": "Creating a Time Entry",
+#       "id": "chunk_123",
+#       "title": "Timesheet",
 #       "url": "https://clockify.me/help/...",
-#       "relevance_score": 0.95,
-#       "content": "You can create a time entry using..."
+#       "content": "...",
+#       "score": 0.95,
+#       "source": "hybrid"  # Could be "vector", "bm25", or "hybrid"
 #     }
-#   ]
+#   ],
+#   "count": 5,
+#   "latency_ms": 45
 # }
 ```
 
-### Step 4: Try Different Query Types
+### Test Chat Endpoint
 
 ```bash
-# How-to query
-curl "http://localhost:8000/search?q=how+to+set+up+projects"
-
-# Definition query
-curl "http://localhost:8000/search?q=what+is+a+workspace"
-
-# Comparison query
-curl "http://localhost:8000/search?q=timer+vs+manual+entry"
-
-# Factual query
-curl "http://localhost:8000/search?q=clockify+pricing"
-
-# General query
-curl "http://localhost:8000/search?q=permissions"
-```
-
-### Step 5: Check Analytics
-
-```bash
-# Get search statistics
-curl http://localhost:8000/analytics
+# Advanced RAG with citations
+curl -X POST http://localhost:7000/chat \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "question": "How do I create a project in Clockify?",
+    "namespace": "clockify",
+    "k": 5,
+    "allow_rewrites": true,
+    "allow_rerank": true
+  }'
 
 # Expected response:
 # {
-#   "total_queries": 5,
-#   "unique_queries": 5,
-#   "zero_result_queries": 0,
-#   "cache_hit_rate": 0.0,
-#   "avg_latency_ms": 78.5,
-#   "popular_queries": [...]
+#   "answer": "To create a project in Clockify [1], ...",
+#   "sources": [
+#     {
+#       "id": "[1]",
+#       "title": "Creating Projects",
+#       "url": "https://clockify.me/help/...",
+#       "namespace": "clockify"
+#     }
+#   ],
+#   "latency_ms": 2500
 # }
-```
-
-### Step 6: Advanced Search Features
-
-```bash
-# Enable reranking (slower, more accurate)
-curl "http://localhost:8000/search?q=track+time&rerank=true"
-
-# Disable caching (get fresh results)
-curl "http://localhost:8000/search?q=track+time&cache=false"
-
-# Get more results
-curl "http://localhost:8000/search?q=track+time&k=10"
-
-# Get detailed matching info
-curl "http://localhost:8000/search?q=track+time&details=true"
-```
-
-### Step 7: Stop the Server
-
-```bash
-# In Terminal 3 where the server is running:
-# Press Ctrl+C
-
-# Output should show:
-# "Shutting down gracefully..."
-# "Server stopped"
 ```
 
 ---
 
 ## Using the API
 
-### Query Syntax Examples
-
-**Simple Search:**
-```bash
-curl "http://localhost:8000/search?q=time+tracking"
-```
-
-**Multi-word Query:**
-```bash
-curl "http://localhost:8000/search?q=how+to+create+a+project"
-```
-
-**Special Characters (URL encoded):**
-```bash
-curl "http://localhost:8000/search?q=what%27s+the+difference"
-```
-
-### Using Python
+### Python Client Example
 
 ```python
 import requests
+import json
 
-# Search
+BASE_URL = "http://localhost:7000"
+
+# 1. Search endpoint
 response = requests.get(
-    "http://localhost:8000/search",
-    params={"q": "track time", "k": 5}
+    f"{BASE_URL}/search",
+    params={
+        "q": "timesheet",
+        "namespace": "clockify",
+        "k": 5
+    }
 )
-
 results = response.json()
-print(f"Found {len(results['results'])} results")
-
+print(f"Found {results['count']} results")
 for result in results['results']:
-    print(f"- {result['title']}")
-    print(f"  Score: {result['relevance_score']:.2f}")
-    print(f"  URL: {result['url']}\n")
+    print(f"- {result['title']}: {result['score']:.2f}")
 
-# Get analytics
-analytics = requests.get("http://localhost:8000/analytics").json()
-print(f"Cache hit rate: {analytics['cache_hit_rate']:.1%}")
+# 2. Chat endpoint (with citations)
+response = requests.post(
+    f"{BASE_URL}/chat",
+    json={
+        "question": "How do I track time?",
+        "namespace": "clockify",
+        "k": 5,
+        "allow_rewrites": True,
+        "allow_rerank": True
+    }
+)
+answer = response.json()
+print(f"\nAnswer: {answer['answer']}")
+print(f"Sources: {len(answer['sources'])} citations")
+for source in answer['sources']:
+    print(f"  [{source['id']}] {source['title']}")
 ```
 
-### Using JavaScript/Node.js
+### JavaScript/Node.js Example
 
 ```javascript
-// Search
-fetch("http://localhost:8000/search?q=track+time")
-  .then(res => res.json())
-  .then(data => {
-    console.log(`Found ${data.results.length} results`);
-    data.results.forEach(r => {
-      console.log(`- ${r.title}`);
-      console.log(`  Score: ${r.relevance_score.toFixed(2)}`);
-      console.log(`  URL: ${r.url}\n`);
-    });
-  });
+// search.js
+const BASE_URL = 'http://localhost:7000';
 
-// Get analytics
-fetch("http://localhost:8000/analytics")
-  .then(res => res.json())
-  .then(data => {
-    console.log(`Cache hit rate: ${(data.cache_hit_rate * 100).toFixed(1)}%`);
+// 1. Search
+async function search(query, namespace) {
+  const response = await fetch(
+    `${BASE_URL}/search?q=${encodeURIComponent(query)}&namespace=${namespace}&k=5`
+  );
+  const data = await response.json();
+  console.log(`Found ${data.count} results`);
+  data.results.forEach(r => {
+    console.log(`- ${r.title}: ${r.score.toFixed(2)}`);
   });
+}
+
+// 2. Chat
+async function chat(question, namespace) {
+  const response = await fetch(`${BASE_URL}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question,
+      namespace,
+      k: 5,
+      allow_rewrites: true,
+      allow_rerank: true
+    })
+  });
+  const data = await response.json();
+  console.log(`Answer: ${data.answer}`);
+  console.log(`Sources: ${data.sources.map(s => `[${s.id}] ${s.title}`).join(', ')}`);
+}
+
+// Usage
+search('timesheet', 'clockify');
+chat('How do I create a project?', 'clockify');
+```
+
+### cURL Examples
+
+```bash
+# Set base URL for convenience
+export BASE="http://localhost:7000"
+
+# 1. Health check
+curl "$BASE/health" | jq
+
+# 2. Simple search
+curl "$BASE/search?q=timesheet&namespace=clockify&k=5" | jq
+
+# 3. Search with reranking (slower, more accurate)
+curl "$BASE/search?q=custom+fields&namespace=clockify&k=10&use_reranker=true" | jq
+
+# 4. Chat with citations
+curl -X POST "$BASE/chat" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "question": "What are the pricing tiers?",
+    "namespace": "clockify",
+    "k": 5
+  }' | jq
+
+# 5. Search LangChain namespace
+curl "$BASE/search?q=retrievers&namespace=langchain&k=5" | jq
 ```
 
 ---
 
 ## Docker Deployment
 
-### Step 1: Install Docker
-
-**macOS:**
-```bash
-brew install docker
-brew install docker-compose
-```
-
-**Linux:**
-```bash
-sudo apt install docker.io docker-compose
-```
-
-**Windows:**
-Download Docker Desktop from https://www.docker.com/products/docker-desktop
-
-### Step 2: Build and Run
+### Build Docker Image
 
 ```bash
-# Navigate to project directory
-cd clrag
-
-# Build the image
+# Build image (from project root)
 docker build -t clockify-rag:latest .
 
 # Or use Docker Compose (simplest)
+docker-compose build
+```
+
+### Run with Docker Compose
+
+**Create docker-compose.override.yml for local setup:**
+```yaml
+version: '3.8'
+
+services:
+  api:
+    environment:
+      - MODEL_BASE_URL=http://host.docker.internal:8000/v1  # macOS/Windows
+      # For Linux:
+      # - MODEL_BASE_URL=http://localhost:8000/v1
+    ports:
+      - "7000:7000"
+    volumes:
+      - ./data:/app/data
+      - ./index:/app/index
+```
+
+**Start services:**
+```bash
+# Terminal: Start Docker Compose
 docker-compose up -d
 
-# Check if running
-docker ps
-
-# View logs
+# Check logs
 docker-compose logs -f api
+
+# Expected output:
+# api_1  | [INFO] Starting API server on :7000
+# api_1  | [INFO] Health: HEALTHY
+
+# Test it
+curl http://localhost:7000/health
 ```
 
-### Step 3: Access the API
-
+**Stop services:**
 ```bash
-# Same as before, but now on Docker
-curl http://localhost:8000/health
-curl "http://localhost:8000/search?q=track+time"
-```
-
-### Step 4: Stop Docker
-
-```bash
-# Stop the services
 docker-compose down
+```
 
-# Or stop individual container
-docker stop clockify-rag
+### Run with Docker (Manual)
+
+```bash
+# Run LLM container
+docker run -d \
+  --name ollama \
+  -p 11434:11434 \
+  ollama/ollama
+
+# Run RAG API container
+docker run -d \
+  --name clockify-rag \
+  -p 7000:7000 \
+  -e MODEL_BASE_URL=http://ollama:11434/v1 \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/index:/app/index \
+  --link ollama \
+  clockify-rag:latest
+
+# Test
+curl http://localhost:7000/health
 ```
 
 ---
 
 ## Monitoring & Debugging
 
-### Check Logs
+### View Real-Time Logs
 
 ```bash
-# View server logs in real-time
+# Watch server logs
 tail -f logs/api.log
 
 # Search for errors
-grep -i error logs/api.log
+grep ERROR logs/api.log
 
-# Count log entries
-wc -l logs/api.log
+# Search for slow queries (>1s)
+grep "latency_ms.*[1-9][0-9][0-9][0-9]" logs/api.log
+
+# Count queries by namespace
+grep "SEARCH\|CHAT" logs/api.log | grep "namespace" | sort | uniq -c
 ```
 
 ### Monitor Performance
 
 ```bash
-# Watch cache hit rate change over time
-watch -n 5 'curl -s http://localhost:8000/analytics | grep cache_hit_rate'
+# Watch latency every 5 seconds
+watch -n 5 'curl -s http://localhost:7000/health | jq .latency_stats'
 
-# Monitor latency
-curl -w "@curl-format.txt" -o /dev/null http://localhost:8000/search?q=test
+# Test concurrent requests
+for i in {1..10}; do
+  curl -s "http://localhost:7000/search?q=test&namespace=clockify" &
+done
 
-# Get full analytics
-curl http://localhost:8000/analytics | python -m json.tool
+# Measure search latency
+time curl "http://localhost:7000/search?q=timesheet&namespace=clockify"
 ```
 
-### Troubleshooting
+### Common Issues
 
-**Problem: "Connection refused" on port 8000**
+**Issue: "Index not loaded"**
 ```bash
-# Check if server is running
-curl http://localhost:8000/health
+# Run pipeline again
+make crawl preprocess chunk embed hybrid
+
+# Or run individual step that failed
+make embed  # if embedding failed
+```
+
+**Issue: "Cannot connect to LLM"**
+```bash
+# Check if LLM is running
+curl http://127.0.0.1:8000/v1/models
 
 # If not, start it:
-python -m src.server
-
-# If port is in use, try different port:
-export API_PORT=8001
-python -m src.server
+ollama serve  # or vLLM, LM Studio, etc.
 ```
 
-**Problem: "Cannot connect to Ollama"**
+**Issue: "Out of memory" during embedding**
 ```bash
-# Check if Ollama is running
-curl http://localhost:11434/api/tags
+# Reduce batch size in .env
+EMBEDDING_BATCH_SIZE=16  # Default is 32
 
-# If not, start it:
-ollama serve
-
-# Check in .env that LLM_BASE_URL is correct
-cat .env | grep LLM_BASE_URL
+# Then re-run embedding
+make embed
 ```
 
-**Problem: "FAISS index not found"**
+**Issue: "Slow search latency"**
 ```bash
-# Rebuild the index
-python -m src.ingest_from_jsonl
+# Check what indexes are loaded
+curl http://localhost:7000/health | jq '.indexes_loaded'
 
-# This will take 10-30 minutes
-```
+# If hybrid search is enabled, first search may be slower
+# Subsequent queries use caching
 
-**Problem: No search results**
-```bash
-# Try simpler query
-curl "http://localhost:8000/search?q=time"
-
-# Check with analytics
-curl http://localhost:8000/analytics
-
-# Look for "zero_result_queries"
+# Try with fewer results
+curl "http://localhost:7000/search?q=test&namespace=clockify&k=3"
 ```
 
 ---
 
-## Common Workflows
+## Advanced Usage
 
-### Workflow 1: Development Session
+### Query Rewriting
+
+The API automatically generates query rewrites to improve recall:
 
 ```bash
-# Terminal 1: Start Ollama
-ollama serve
+# With rewrites (default)
+curl "http://localhost:7000/search?q=track+time&namespace=clockify&k=5&allow_rewrites=true"
 
-# Terminal 2: Start server
-source .venv/bin/activate
-python -m src.server
-
-# Terminal 3: Test queries
-curl "http://localhost:8000/search?q=your+query"
-
-# Terminal 4: Monitor
-watch curl http://localhost:8000/analytics
-
-# When done, Ctrl+C in Terminal 2 and Terminal 1
+# Disable rewrites (faster)
+curl "http://localhost:7000/search?q=track+time&namespace=clockify&k=5&allow_rewrites=false"
 ```
 
-### Workflow 2: Testing Query Types
+### Cross-Encoder Reranking
+
+Improves precision by re-scoring top candidates:
 
 ```bash
-# Test each query type detection
-curl "http://localhost:8000/search?q=how+do+i+track+time&details=true"    # how-to
-curl "http://localhost:8000/search?q=what+is+a+project&details=true"     # definition
-curl "http://localhost:8000/search?q=timer+vs+manual&details=true"       # comparison
-curl "http://localhost:8000/search?q=does+clockify+have&details=true"    # factual
+# With reranking (slower, more accurate)
+curl "http://localhost:7000/search?q=custom+fields&namespace=clockify&k=10&use_reranker=true"
+
+# Without reranking (faster)
+curl "http://localhost:7000/search?q=custom+fields&namespace=clockify&k=10&use_reranker=false"
 ```
 
-### Workflow 3: Performance Testing
+### Parent-Child Indexing
+
+Retrieves child chunks with parent context:
 
 ```bash
-# Test latency without cache
-for i in {1..10}; do
-  curl -w "Latency: %{time_total}s\n" -o /dev/null \
-    "http://localhost:8000/search?q=track+time&cache=false"
-done
-
-# Test with cache (should be much faster)
-for i in {1..10}; do
-  curl -w "Latency: %{time_total}s\n" -o /dev/null \
-    "http://localhost:8000/search?q=track+time&cache=true"
-done
+# Details show parent-child info
+curl "http://localhost:7000/search?q=timesheet&namespace=clockify&k=3&details=true" | jq '.results[].context'
 ```
 
-### Workflow 4: Load Testing
+### Hybrid Search
+
+Combines vector search (semantic) + BM25 (lexical):
 
 ```bash
-# Install Apache Bench
-# macOS: brew install httpd
-# Linux: sudo apt install apache2-utils
+# View which search method matched each result
+curl "http://localhost:7000/search?q=timesheet&namespace=clockify" | jq '.results[].source'
+# Output: "vector", "bm25", or "hybrid"
+```
 
-# Run load test
-ab -n 1000 -c 10 "http://localhost:8000/search?q=track+time"
+### Incremental Crawling
 
-# Expected output shows:
-# - Requests per second
-# - Time per request
-# - Success rate
+Update indexes with new articles:
+
+```bash
+# Crawl only new/updated articles (respects ETags)
+make crawl INCREMENTAL=true
+
+# Re-process and re-index
+make preprocess chunk embed hybrid
 ```
 
 ---
 
-## Production Deployment
+## Configuration Reference
 
-### Option 1: Docker Compose
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MODEL_BASE_URL` | `http://127.0.0.1:8000/v1` | Local LLM OpenAI-compatible endpoint |
+| `MODEL_NAME` | `oss20b` | Model name (must be loaded/available) |
+| `EMBEDDING_MODEL` | `intfloat/multilingual-e5-base` | Embedding model |
+| `CRAWL_BASES` | Clockify + LangChain | URLs to crawl (comma-separated) |
+| `PARENT_CHILD_INDEXING` | `true` | Enable parent-child nodes |
+| `HYBRID_SEARCH` | `true` | Combine vector + BM25 search |
+| `QUERY_REWRITES` | `true` | Generate query rewrites |
+| `USE_RERANKER` | `true` | Cross-encoder reranking |
+| `DEBUG` | `false` | Verbose logging |
 
-```bash
-# Edit .env for production
-nano .env
+---
 
-# Key changes:
-# DEBUG=false
-# API_HOST=0.0.0.0
-# CACHE_SIZE=10000
+## Performance Expectations
 
-# Deploy
-docker-compose up -d
-
-# Check status
-docker-compose ps
-
-# View logs
-docker-compose logs -f
-```
-
-### Option 2: Kubernetes
-
-```bash
-# Apply manifests
-kubectl apply -f deployment.yaml
-
-# Check deployment
-kubectl get pods
-kubectl get svc
-
-# View logs
-kubectl logs -f deployment/clockify-rag-api
-
-# Port forward for testing
-kubectl port-forward svc/clockify-rag-service 8000:80
-```
-
-### Option 3: Manual Server
-
-```bash
-# Create systemd service file
-sudo nano /etc/systemd/system/clockify-rag.service
-
-# Add content from PRODUCTION_DEPLOYMENT.md
-
-# Enable and start
-sudo systemctl enable clockify-rag
-sudo systemctl start clockify-rag
-
-# Check status
-sudo systemctl status clockify-rag
-
-# View logs
-sudo journalctl -u clockify-rag -f
-```
+| Operation | Time | Notes |
+|-----------|------|-------|
+| First crawl | 10-15 min | Depends on domain size + network |
+| Preprocessing | 5-10 min | HTML → Markdown conversion |
+| Chunking | 2-5 min | Creating parent-child nodes |
+| Embedding | 10-20 min | Depends on embedding hardware + batch size |
+| BM25 indexing | 2-5 min | Fast, lightweight |
+| **Total first run** | **30-60 min** | One-time cost |
+| Incremental crawl | 2-5 min | Only new/updated articles |
+| Search latency | 50-100 ms | FAISS search (cached/warm) |
+| Chat latency | 5-30 sec | LLM-dominated |
 
 ---
 
 ## Next Steps
 
 1. ✅ Complete initial setup
-2. ✅ Run local development server
-3. ✅ Test basic searches
-4. 📖 Read API_DOCUMENTATION.md for advanced features
-5. 🚀 Deploy to production using your preferred method
-6. 📊 Monitor analytics and optimize
+2. ✅ Run full pipeline (crawl → embed)
+3. ✅ Start API server
+4. ✅ Test endpoints
+5. 📖 Read README.md for architecture details
+6. 📖 Read OPERATOR_GUIDE.md for tuning
+7. 🚀 Deploy to production (Docker/Kubernetes)
+8. 📊 Monitor via /health endpoint
 
 ---
 
-## Help & Support
+## Support
 
-**Still stuck?**
-1. Check QUICK_START.md for 5-minute version
-2. Read API_DOCUMENTATION.md for endpoint details
-3. See PRODUCTION_DEPLOYMENT.md for deployment help
-4. Check logs: `tail -f logs/api.log`
-5. Open issue on GitHub: https://github.com/apet97/clrag/issues
+**For issues:**
+1. Check logs: `tail -f logs/api.log`
+2. Verify LLM is running: `curl http://127.0.0.1:8000/v1/models`
+3. Check health: `curl http://localhost:7000/health`
+4. Open issue: https://github.com/apet97/clrag/issues
+
+**Documentation:**
+- README.md - Overview
+- OPERATOR_GUIDE.md - Tuning & troubleshooting
+- API_DOCUMENTATION.md - Endpoint reference
+- DEPLOY_TO_GITHUB.md - GitHub deployment
 
 ---
 
-**Happy searching!** 🎉
+**Last Updated:** October 20, 2025
+**Status:** Production Ready
+**Version:** Advanced Multi-Corpus RAG Stack 2.0
