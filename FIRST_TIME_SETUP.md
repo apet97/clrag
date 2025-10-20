@@ -8,12 +8,25 @@ Fresh clones need to build the index for the first time. This is a 3-step proces
 2. **Crawl and ingest data** - Fetch Clockify help pages and build FAISS index (requires Ollama)
 3. **Build Docker image** - Package everything for deployment
 
+## Python Version
+
+**Recommended: Python 3.11, 3.12, or 3.13**
+
+All dependencies have pre-built wheels for these versions. If you have Python 3.14+, you may need to build from source, which requires a C compiler.
+
+**Check your Python version:**
+```bash
+python3 --version
+```
+
+If you have 3.14+, consider using Python 3.13 instead (see Optional: Use Specific Python Version below).
+
 ## Quick Start (Recommended)
 
 ```bash
 cd clrag
 
-# 1. Create virtual environment
+# 1. Create virtual environment (uses current Python)
 python3 -m venv .venv
 source .venv/bin/activate
 
@@ -133,9 +146,57 @@ docker-compose up -d
 
 ---
 
+## Optional: Use Specific Python Version
+
+If you have Python 3.14+ and want to use Python 3.13 instead:
+
+```bash
+# macOS with Homebrew
+brew install python@3.13
+
+# Then specify it when creating venv
+python3.13 -m venv .venv
+source .venv/bin/activate
+
+# Or on older setups
+/usr/local/bin/python3.13 -m venv .venv
+source .venv/bin/activate
+```
+
+**Why?** Python 3.14+ doesn't have pre-built wheels for all packages, which requires C compiler and build tools. Python 3.11-3.13 are guaranteed to work.
+
+## Troubleshooting
+
+### "ModuleNotFoundError: No module named 'httpx'"
+**Cause:** Virtual environment wasn't created or pip install failed
+
+**Fix:**
+```bash
+# Delete old venv and start fresh
+rm -rf .venv
+
+# Create new venv with Python 3.13 (or current Python if 3.13 unavailable)
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Reinstall everything
+pip install -r requirements.txt
+```
+
+### "pip install fails with 'Failed to build...'"
+**Cause:** You're using Python 3.14+ (needs compiler) or missing build tools
+
+**Fix:**
+```bash
+# Use Python 3.13 instead (see section above)
+python3.13 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
 ## Quick Summary
 
-1. **First time?** → Run Python setup + `python -m src.ingest`
+1. **First time?** → Run Python setup + `python -m src.scrape` + `python -m src.ingest`
 2. **Index exists?** → Use Docker: `docker build ... && docker-compose up`
 
 That's it! 🚀
