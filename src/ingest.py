@@ -18,7 +18,11 @@ import requests
 from loguru import logger
 
 # Config
-HELP_DIR = Path(os.getenv("HELP_DIR", "data/raw/clockify"))
+# Use pre-cleaned data by default (data/clean/clockify/ has 102 verified help pages)
+# Falls back to raw scrape (data/raw/clockify/) if available
+# Can override with HELP_DIR environment variable
+default_help_dir = "data/clean/clockify" if Path("data/clean/clockify").exists() else "data/raw/clockify"
+HELP_DIR = Path(os.getenv("HELP_DIR", default_help_dir))
 OLLAMA_BASE_URL = os.getenv("LLM_BASE_URL", "http://10.127.0.192:11434")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 NAMESPACE = "clockify"
