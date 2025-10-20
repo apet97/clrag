@@ -35,6 +35,13 @@ app = FastAPI(default_response_class=ORJSONResponse)
 async def startup():
     """Initialize embeddings and FAISS index on startup."""
     logger.info("RAG System startup: seeding randomness and warming up embedding model...")
+
+    # Prod guard: API_TOKEN must not be "change-me" in production (AXIOM 0)
+    ENV = os.getenv("ENV", "dev")
+    if ENV == "prod" and API_TOKEN == "change-me":
+        logger.error("API_TOKEN must not be 'change-me' in production")
+        raise RuntimeError("Invalid production config: API_TOKEN not configured")
+
     # Seed randomness for deterministic behavior (AXIOM 1)
     random.seed(0)
     np.random.seed(0)
@@ -111,15 +118,25 @@ def fuse_results(by_ns: dict[str, list[dict]], k: int) -> list[dict]:
     return merged[:k]
 
 # --------- Models ---------
+class SearchQuery(BaseModel):
+    """Validated search query parameters."""
+    q: str = Field(..., min_length=1, max_length=2000)
+    k: int = Field(default=None, ge=1, le=20)
+    namespace: str | None = Field(default=None, max_length=100)
+
 class SearchResponse(BaseModel):
+    """Search response with request tracing."""
     results: list[dict]
+    request_id: str = ""
 
 class ChatRequest(BaseModel):
-    question: str
-    k: int | None = None
-    namespace: str | None = None
+    """Validated chat request."""
+    question: str = Field(..., min_length=1, max_length=2000)
+    k: int | None = Field(default=None, ge=1, le=20)
+    namespace: str | None = Field(default=None, max_length=100)
 
 class ChatResponse(BaseModel):
+    """Chat response with citations and grounding."""
     answer: str
     sources: list[dict]
     latency_ms: dict
@@ -127,12 +144,18 @@ class ChatResponse(BaseModel):
 
 # --------- Auth/limits ---------
 def require_token(token: str | None):
-    # If API_TOKEN is set (not default), enforce it; otherwise allow all
-    if API_TOKEN != "change-me" and token != API_TOKEN:
+    """Verify API token using constant-time comparison (AXIOM 0)."""
+    # Token is always required; AXIOM 0 enforcement
+    if not token:
         raise HTTPException(status_code=401, detail="unauthorized")
+    # If API_TOKEN != "change-me" (production), validate it matches; else allow any token (dev mode)
+    if API_TOKEN != "change-me":
+        if not hmac.compare_digest(token, API_TOKEN):
+            raise HTTPException(status_code=401, detail="unauthorized")
 
 _last_req: dict[str, float] = {}
-def rate_limit(ip: str, min_interval: float = 0.25):
+def rate_limit(ip: str, min_interval: float = 0.1):
+    """Rate limit: enforce minimum interval between requests per IP (AXIOM 0)."""
     now = time.time()
     t = _last_req.get(ip, 0.0)
     if now - t < min_interval:
@@ -303,6 +326,8 @@ def search(q: str, k: int | None = None, namespace: str | None = None, request: 
 
         # Fuse and deduplicate by URL (AXIOM 4)
         candidates = fuse_results(per_ns, raw_k) if len(ns_list) > 1 else per_ns[ns_list[0]]
+        # AXIOM 1: Stable sort on candidates before dedup to ensure deterministic tie-breaking
+        candidates.sort(key=lambda r: (-float(r.get("score", 0.0)), r.get("url", ""), r.get("title", "")))
         seen_urls = set()
         results_dedup = []
         for candidate in candidates:
@@ -324,7 +349,8 @@ def search(q: str, k: int | None = None, namespace: str | None = None, request: 
         latency_ms = int((time.time() - t0) * 1000)
         logger.info(f"Search '{q}' k={k} -> {len(results)} results (unique URLs) in {latency_ms}ms")
 
-        return {"query": q, "count": len(results), "results": results}
+        request_id = str(uuid4())
+        return {"query": q, "count": len(results), "request_id": request_id, "results": results}
 
     except Exception as e:
         logger.error(f"Search failed: {str(e)}")
@@ -356,6 +382,8 @@ def chat(req: ChatRequest, request: Request, x_api_token: str | None = Header(de
         per_ns = {ns: search_ns(ns, qvec[None,:].astype(np.float32), raw_k) for ns in ns_list}
 
         candidates = fuse_results(per_ns, raw_k) if len(ns_list) > 1 else per_ns[ns_list[0]]
+        # AXIOM 1: Stable sort on candidates before dedup to ensure deterministic tie-breaking
+        candidates.sort(key=lambda r: (-float(r.get("score", 0.0)), r.get("url", ""), r.get("title", "")))
         seen_urls = set()
         hits = []
         for candidate in candidates:
@@ -435,6 +463,7 @@ def chat(req: ChatRequest, request: Request, x_api_token: str | None = Header(de
         )
 
         model_used = os.getenv("LLM_MODEL", "gpt-oss:20b")
+        request_id = str(uuid4())
         return {
             "answer": answer,
             "sources": sources,
@@ -442,6 +471,8 @@ def chat(req: ChatRequest, request: Request, x_api_token: str | None = Header(de
             "model_used": model_used,
             "latency_ms": {"retrieval": t_retr, "llm": t_llm, "total": int((time.time() - t0) * 1000)},
             "meta": {
+                "request_id": request_id,
+                "temperature": temp,
                 "model": model_used,
                 "namespaces_used": ns_list,
                 "k": k,
