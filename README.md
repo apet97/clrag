@@ -14,12 +14,31 @@ Local, production-ready retrieval-augmented generation system for Clockify Help 
 
 ## Quick Start
 
+### Option 1: Company AI (Fastest - 2 min setup)
+If you have access to `10.127.0.192:11434` (company AI):
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.sample .env
+# .env.sample already configured for company AI - verify connection
+curl http://10.127.0.192:11434/api/tags
+# Then proceed to pipeline
+make crawl preprocess chunk embed hybrid
+make serve
+```
+
+**See [COMPANY_AI_SETUP.md](COMPANY_AI_SETUP.md) for full guide, models, IDE integration, and feedback.**
+
+### Option 2: Local/External LLM (Standard setup)
+
 ```bash
 # 1. Setup
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.sample .env
-# Edit .env: set MODEL_BASE_URL if using non-default local LLM
+# Edit .env: set MODEL_BASE_URL to your local/external LLM
+# See STEP_BY_STEP_GUIDE.md for LLM setup options
 
 # 2. Crawl + Process
 make crawl preprocess chunk embed hybrid

@@ -177,6 +177,25 @@ DEBUG=false
 
 **IMPORTANT: Your local LLM must be running BEFORE you start the pipeline!**
 
+### Option 0: Company AI (Internal - Fastest Setup)
+
+If you have access to the company AI instance at `10.127.0.192:11434`:
+
+```bash
+# No setup needed! Just verify connection:
+curl http://10.127.0.192:11434/api/tags
+
+# Edit .env:
+MODEL_BASE_URL=http://10.127.0.192:11434
+MODEL_NAME=gpt-oss:20b
+
+# Then proceed directly to "Running the Full Pipeline"
+```
+
+**See [COMPANY_AI_SETUP.md](COMPANY_AI_SETUP.md) for full details, model options, and feedback.**
+
+---
+
 ### Option 1: Ollama (Recommended)
 
 **Terminal 1 - Start Ollama:**

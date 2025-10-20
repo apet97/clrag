@@ -4,6 +4,21 @@
 
 ---
 
+## 🏢 Company AI (Internal - Fastest!)
+
+### **[COMPANY_AI_SETUP.md](COMPANY_AI_SETUP.md)**
+Using the company AI model at `10.127.0.192:11434` (gpt-oss:20b):
+- Quick setup (2 minutes, just copy config)
+- All available models and their specs
+- IDE integration info
+- Feedback collection template
+- Performance expectations
+- Troubleshooting
+
+**Start here if you have access to company AI!**
+
+---
+
 ## 🚀 Getting Started (Pick One)
 
 ### ⏱️ I have 5 minutes - **[QUICKSTART.md](QUICKSTART.md)**
@@ -12,6 +27,7 @@ Copy-paste Docker commands, get running immediately with web UI.
 ### 📖 I have 30 minutes - **[STEP_BY_STEP_GUIDE.md](STEP_BY_STEP_GUIDE.md)**
 Comprehensive terminal walkthrough covering:
 - Prerequisites installation
+- Company AI setup (Option 0 - fastest!)
 - Local LLM setup (Ollama/vLLM/LM Studio)
 - Full pipeline (crawl → preprocess → chunk → embed → hybrid)
 - API testing
