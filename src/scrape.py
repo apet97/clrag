@@ -22,10 +22,11 @@ load_dotenv()
 # Configuration
 CRAWL_BASES = os.getenv("CRAWL_BASES", "https://clockify.me/help/").split(",")
 DOMAINS_WHITELIST = set(os.getenv("DOMAINS_WHITELIST", "clockify.me,docs.langchain.com").split(","))
-CRAWL_CONCURRENCY = int(os.getenv("CRAWL_CONCURRENCY", "4"))
-CRAWL_DELAY_SEC = float(os.getenv("CRAWL_DELAY_SEC", "1"))
-CRAWL_MAX_PAGES = int(os.getenv("CRAWL_MAX_PAGES", "500"))
+CRAWL_CONCURRENCY = int(os.getenv("CRAWL_CONCURRENCY", "8"))  # Increased parallelism
+CRAWL_DELAY_SEC = float(os.getenv("CRAWL_DELAY_SEC", "0.5"))  # Reduced delay for faster crawling
+CRAWL_MAX_PAGES = int(os.getenv("CRAWL_MAX_PAGES", "2000"))  # Increased max pages to capture all help articles
 CRAWL_TIMEOUT = int(os.getenv("CRAWL_TIMEOUT", "30"))
+CRAWL_MAX_DEPTH = int(os.getenv("CRAWL_MAX_DEPTH", "5"))  # Crawl depth for deep resource discovery
 
 DATA_RAW_DIR = Path("data/raw")
 CRAWL_STATE = Path("data/.crawl_state.json")
@@ -263,16 +264,55 @@ class MultiNamespaceScraper:
             return None
 
     def _extract_links(self, html: str, base_url: str) -> Set[str]:
-        """Extract internal links from HTML."""
+        """Extract ALL internal links from HTML (comprehensive resource discovery)."""
         links = set()
         try:
             soup = BeautifulSoup(html, "html.parser")
+
+            # Extract from <a> tags (main content links)
             for link in soup.find_all("a", href=True):
                 href = link["href"]
                 absolute_url = urljoin(base_url, href)
                 normalized = self._normalize_url(absolute_url)
                 if normalized and normalized not in self.visited_urls:
                     links.add(normalized)
+
+            # Extract from sitemap links (if present)
+            for sitemap in soup.find_all("link", {"rel": "alternate", "hreflang": True}):
+                href = sitemap.get("href")
+                if href:
+                    absolute_url = urljoin(base_url, href)
+                    normalized = self._normalize_url(absolute_url)
+                    if normalized and normalized not in self.visited_urls:
+                        links.add(normalized)
+
+            # Extract from breadcrumb navigation
+            for breadcrumb in soup.find_all("li", {"class": lambda x: x and "breadcrumb" in x.lower()}):
+                for a in breadcrumb.find_all("a", href=True):
+                    href = a["href"]
+                    absolute_url = urljoin(base_url, href)
+                    normalized = self._normalize_url(absolute_url)
+                    if normalized and normalized not in self.visited_urls:
+                        links.add(normalized)
+
+            # Extract from navigation menus and sidebars
+            for nav in soup.find_all(["nav", "aside"]):
+                for a in nav.find_all("a", href=True):
+                    href = a["href"]
+                    absolute_url = urljoin(base_url, href)
+                    normalized = self._normalize_url(absolute_url)
+                    if normalized and normalized not in self.visited_urls:
+                        links.add(normalized)
+
+            # Extract from related articles/links sections
+            for section in soup.find_all(["section", "div"], {"class": lambda x: x and any(p in x.lower() for p in ["related", "articles", "links", "resources", "help"])}):
+                for a in section.find_all("a", href=True):
+                    href = a["href"]
+                    absolute_url = urljoin(base_url, href)
+                    normalized = self._normalize_url(absolute_url)
+                    if normalized and normalized not in self.visited_urls:
+                        links.add(normalized)
+
         except Exception as e:
             logger.debug(f"Error extracting links: {e}")
         return links
