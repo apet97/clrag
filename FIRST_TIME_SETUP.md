@@ -91,9 +91,9 @@ If you want fresh data from the web:
 
 1. **Step 1: Scrape (src.scrape)**
    - Crawls clockify.me/help and saves pages to `data/raw/clockify/`
-   - Time: 5-10 minutes to fetch 500 pages
+   - Time: 5-10 minutes to fetch 500+ pages
    - Command: `python -m src.scrape`
-   - ⚠️ May include marketing pages mixed with help content
+   - ✅ Filters to ONLY help articles (excludes marketing, non-English variants)
 
 2. **Step 2: Ingest (src.ingest)**
    - Processes HTML and creates embeddings with Ollama
