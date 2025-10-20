@@ -19,7 +19,7 @@ pydantic==2.5.0
 
 # Vector Search & Embeddings (pinned for reproducible builds)
 sentence-transformers==2.6.1
-faiss-cpu==1.8.0
+faiss-cpu==1.12.0
 numpy==1.26.4
 
 # Reranking (cross-encoder) - optional for now
