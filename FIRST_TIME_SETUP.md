@@ -30,15 +30,18 @@ export LLM_BASE_URL=http://10.127.0.192:11434  # Replace with your team's IP
 # 4. Verify Ollama is reachable
 curl $LLM_BASE_URL/api/tags
 
-# 5. Build the FAISS index (this fetches clockify.me/help pages)
+# 5. Scrape Clockify Help (creates data/raw/)
+python -m src.scrape
+
+# 6. Build the FAISS index (this processes and embeds pages)
 python -m src.ingest
 
-# 6. Now Docker will work!
+# 7. Now Docker will work!
 docker build -t rag-system:latest .
 docker-compose up -d
 ```
 
-**Note:** Step 5 takes 5-15 minutes to crawl and embed ~200 pages from clockify.me/help
+**Note:** Steps 5-6 take 10-20 minutes total to crawl 200+ pages and embed them
 
 ## Option 2: Skip Docker, Use Python Directly
 
@@ -53,67 +56,68 @@ pip install -r requirements.txt
 # 2. Set Ollama URL (local or remote)
 export LLM_BASE_URL=http://10.127.0.192:11434  # Your team's Ollama
 
-# 3. Build index
+# 3. Scrape Clockify Help
+python -m src.scrape
+
+# 4. Build FAISS index
 python -m src.ingest
 
-# 4. Copy config and update Ollama URL
+# 5. Copy config and update Ollama URL
 cp .env.sample .env
 # Edit .env and set: LLM_BASE_URL=http://10.127.0.192:11434
 
-# 5. Run server
+# 6. Run server
 python -m src.server
 
-# 6. Open http://localhost:7000 in browser
+# 7. Open http://localhost:7000 in browser
 ```
 
-## What src.ingest Does
+## Two-Step Process: Scrape → Ingest
 
-The ingestion process requires pre-crawled HTML/markdown files in `data/clockify_help/`:
+The setup involves two separate scripts:
 
-1. **Reads files** from `data/clockify_help/` (HTML/markdown files)
-2. **Creates embeddings** using Ollama's `nomic-embed-text` model
-3. **Builds FAISS index** at `index/faiss/clockify/`
-4. **Creates metadata** in `index/faiss/clockify/meta.json`
+### Step 1: Scrape (src.scrape)
+- **What it does:** Crawls clockify.me/help and saves pages to `data/raw/`
+- **Time:** 5-10 minutes to fetch 200+ pages
+- **Command:** `python -m src.scrape`
+- **Output:** Raw HTML files in `data/raw/clockify/`
 
-**NOTE:** Fresh clones don't include pre-crawled HTML files. You must either:
-- **Option A:** Run the web crawler first to populate `data/clockify_help/`
-- **Option B:** Use pre-built index if available (check if `index/faiss/clockify/` already exists)
-
-### Option A: Crawl Data First (Recommended)
-
-```bash
-# Set Ollama URL (local or team server)
-export LLM_BASE_URL=http://10.127.0.192:11434
-
-# Verify connection
-curl $LLM_BASE_URL/api/tags
-
-# Run ingestion (crawls clockify.me/help and builds index)
-python -m src.ingest
-```
-
-This will:
-1. Fetch pages from `https://clockify.me/help/*`
-2. Save HTML to `data/clockify_help/`
-3. Create FAISS index using remote Ollama
-4. Takes 5-15 minutes depending on internet speed
+### Step 2: Ingest (src.ingest)
+- **What it does:**
+  - Processes HTML from `data/raw/`
+  - Creates embeddings using Ollama's `nomic-embed-text` model
+  - Builds FAISS index at `index/faiss/clockify/`
+  - Creates metadata file `index/faiss/clockify/meta.json`
+- **Time:** 5-10 minutes to process and embed pages
+- **Command:** `python -m src.ingest`
+- **Requires:** Ollama running with `nomic-embed-text` model available
 
 ### Remote Ollama Setup
 
 If your team has Ollama hosted on a remote server:
 
 ```bash
-# Set the remote Ollama URL
+# Set the remote Ollama URL before ingesting
 export LLM_BASE_URL=http://10.127.0.192:11434
 
 # Test connectivity
 curl http://10.127.0.192:11434/api/tags
 
-# Then proceed with ingestion
+# Then run scrape and ingest
+python -m src.scrape
 python -m src.ingest
 ```
 
-The URL will be saved in the Docker configuration, so it persists across deployments.
+The URL will be saved in `.env` and persists across deployments.
+
+### Why Two Steps?
+
+1. **Scrape (src.scrape)** - Fetches content from the web
+2. **Ingest (src.ingest)** - Processes and embeds with Ollama
+
+This separation allows you to:
+- Cache crawled data and re-ingest with different settings
+- Skip scraping if you have cached data already
 
 ## After Index is Built
 
