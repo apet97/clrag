@@ -123,6 +123,44 @@ class MultiNamespaceScraper:
         with open(CRAWL_STATE, "w") as f:
             json.dump(self.state, f, indent=2)
 
+    def _is_help_article(self, url: str) -> bool:
+        """Check if URL is an actual help article (not marketing, language variant, etc)."""
+        parsed = urlparse(url)
+        path = parsed.path.lower()
+
+        # For clockify.me: only accept /help/* paths (exclude non-English variants)
+        if "clockify.me" in parsed.netloc:
+            # Must be under /help/
+            if not path.startswith("/help/"):
+                return False
+
+            # Exclude language-specific paths like /help/fr/, /help/es/, etc
+            path_parts = path.split("/")
+            if len(path_parts) > 2:
+                lang_part = path_parts[2]
+                # Exclude 2-letter language codes at start of path
+                if len(lang_part) == 2 and lang_part.isalpha() and lang_part not in ["en"]:
+                    return False
+                # Exclude paths that are just language codes
+                if lang_part in ["fr", "es", "de", "pt", "ja", "zh", "ru", "ar", "hi"]:
+                    return False
+
+            # Exclude common non-help pages
+            excluded_patterns = [
+                "/help/customers",
+                "/help/partners",
+                "/help/start",
+                "/help/index",
+                "/help/$",  # homepage
+                "/help?",  # query strings
+            ]
+            if any(pattern in path for pattern in excluded_patterns):
+                return False
+
+            return True
+
+        return True  # For other domains, accept as-is
+
     def _normalize_url(self, url: str) -> Optional[str]:
         """Normalize URL and check domain."""
         try:
@@ -131,6 +169,10 @@ class MultiNamespaceScraper:
 
             # Check domain whitelist
             if not any(domain.endswith(allowed) for allowed in DOMAINS_WHITELIST):
+                return None
+
+            # Check if it's an actual help article
+            if not self._is_help_article(url):
                 return None
 
             # Remove fragments and querystrings (except tracking)
