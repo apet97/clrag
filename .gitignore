@@ -1,27 +1,20 @@
-# Virtual Environment
-.venv/
-venv/
-env/
-ENV/
-*.egg-info/
-dist/
-build/
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Data and Index
-data/raw/
-data/clean/
-data/chunks/
-data/.crawl_state.json
-index/faiss/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Environment
 .env
@@ -36,15 +29,26 @@ index/faiss/
 *~
 .DS_Store
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
 # Logs
 logs/
 *.log
 
+# Large files
+*.bin
+*.pkl
+*.tar.gz
+*.zip
+
 # OS
-.DS_Store
 Thumbs.db
+.DS_Store
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# Cache
+.cache/
+.mypy_cache/
+
