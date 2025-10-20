@@ -8,14 +8,14 @@ urllib3==2.1.0
 trafilatura==1.6.1
 beautifulsoup4==4.12.2
 readability-lxml==0.8.1
-lxml==5.2.2
+lxml>=5.0.0
 markdown==3.5.1
 
-# API Framework (fastapi 0.115.0 + pydantic 2.8+ for Python 3.13 support)
+# API Framework (fastapi 0.115.0 + pydantic 2.9+ for Python 3.13 support)
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 orjson==3.10.7
-pydantic==2.8.0
+pydantic>=2.9.0
 
 # Vector Search & Embeddings (pinned for reproducible builds)
 sentence-transformers==2.6.1
