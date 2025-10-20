@@ -21,12 +21,12 @@ python3 --version
 
 If you have 3.14+, consider using Python 3.13 instead (see Optional: Use Specific Python Version below).
 
-## Quick Start (Recommended)
+## Quick Start (Recommended - 5 Minutes)
 
 ```bash
 cd clrag
 
-# 1. Create virtual environment (uses current Python)
+# 1. Create virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
 
@@ -34,27 +34,21 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # 3. Point to your Ollama server (local or remote)
-# For LOCAL Ollama:
-export LLM_BASE_URL=http://localhost:11434
-
-# OR for REMOTE Ollama (team server):
-export LLM_BASE_URL=http://10.127.0.192:11434  # Replace with your team's IP
+# For REMOTE Ollama (team server):
+export LLM_BASE_URL=http://10.127.0.192:11434
 
 # 4. Verify Ollama is reachable
 curl $LLM_BASE_URL/api/tags
 
-# 5. Scrape Clockify Help (creates data/raw/)
-python -m src.scrape
-
-# 6. Build the FAISS index (this processes and embeds pages)
+# 5. Build FAISS index from pre-cleaned data (uses data/clean/clockify/)
 python -m src.ingest
 
-# 7. Now Docker will work!
+# 6. Now Docker will work!
 docker build -t rag-system:latest .
 docker-compose up -d
 ```
 
-**Note:** Steps 5-6 take 10-20 minutes total to crawl 200+ pages and embed them
+**Time:** Step 5 takes 10-15 minutes to embed 102 pre-cleaned help pages
 
 ## Option 2: Skip Docker, Use Python Directly
 
@@ -67,43 +61,54 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # 2. Set Ollama URL (local or remote)
-export LLM_BASE_URL=http://10.127.0.192:11434  # Your team's Ollama
+export LLM_BASE_URL=http://10.127.0.192:11434
 
-# 3. Scrape Clockify Help
-python -m src.scrape
-
-# 4. Build FAISS index
+# 3. Build FAISS index (uses pre-cleaned data)
 python -m src.ingest
 
-# 5. Copy config and update Ollama URL
+# 4. Copy config and update Ollama URL
 cp .env.sample .env
 # Edit .env and set: LLM_BASE_URL=http://10.127.0.192:11434
 
-# 6. Run server
+# 5. Run server
 python -m src.server
 
-# 7. Open http://localhost:7000 in browser
+# 6. Open http://localhost:7000 in browser
 ```
 
-## Two-Step Process: Scrape → Ingest
+## Data Sources and Ingestion
 
-The setup involves two separate scripts:
+### Recommended: Use Pre-Cleaned Data (Fastest ✅)
 
-### Step 1: Scrape (src.scrape)
-- **What it does:** Crawls clockify.me/help and saves pages to `data/raw/`
-- **Time:** 5-10 minutes to fetch 200+ pages
-- **Command:** `python -m src.scrape`
-- **Output:** Raw HTML files in `data/raw/clockify/`
+The repository includes pre-cleaned, verified Clockify help pages in `data/clean/clockify/`:
+- **102 verified help pages** (already curated for quality)
+- **No web scraping needed** - data is ready to use
+- **Just run ingest:** `python -m src.ingest`
 
-### Step 2: Ingest (src.ingest)
-- **What it does:**
-  - Processes HTML from `data/raw/`
-  - Creates embeddings using Ollama's `nomic-embed-text` model
-  - Builds FAISS index at `index/faiss/clockify/`
-  - Creates metadata file `index/faiss/clockify/meta.json`
-- **Time:** 5-10 minutes to process and embed pages
-- **Command:** `python -m src.ingest`
-- **Requires:** Ollama running with `nomic-embed-text` model available
+### Alternative: Web Scrape + Ingest (Slower)
+
+If you want fresh data from the web:
+
+1. **Step 1: Scrape (src.scrape)**
+   - Crawls clockify.me/help and saves pages to `data/raw/clockify/`
+   - Time: 5-10 minutes to fetch 500 pages
+   - Command: `python -m src.scrape`
+   - ⚠️ May include marketing pages mixed with help content
+
+2. **Step 2: Ingest (src.ingest)**
+   - Processes HTML and creates embeddings with Ollama
+   - Time: 10-15 minutes to embed pages
+   - Command: `python -m src.ingest`
+   - Will automatically use `data/clean/clockify/` if it exists, else uses `data/raw/`
+
+### How Ingest Works
+
+The `src/ingest.py` script automatically:
+1. Checks for `data/clean/clockify/` (pre-cleaned, verified data) ✅ **USE THIS**
+2. Falls back to `data/raw/clockify/` (from web scrape) if clean data doesn't exist
+3. Can override with `HELP_DIR` environment variable if needed
+
+**For best results:** Use the pre-cleaned data in `data/clean/clockify/`
 
 ### Remote Ollama Setup
 
