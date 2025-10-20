@@ -1,4 +1,5 @@
-# Python 3.11-3.13 supported (all versions with pre-built wheels)
+# Python 3.11+ supported (3.11-3.13 recommended for best compatibility)
+# Note: Python 3.14+ may require building from source for some packages
 
 # Web Scraping & HTTP
 httpx==0.27.2
