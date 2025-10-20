@@ -22,11 +22,11 @@ load_dotenv()
 # Configuration
 CRAWL_BASES = os.getenv("CRAWL_BASES", "https://clockify.me/help/").split(",")
 DOMAINS_WHITELIST = set(os.getenv("DOMAINS_WHITELIST", "clockify.me,docs.langchain.com").split(","))
-CRAWL_CONCURRENCY = int(os.getenv("CRAWL_CONCURRENCY", "8"))  # Increased parallelism
-CRAWL_DELAY_SEC = float(os.getenv("CRAWL_DELAY_SEC", "0.5"))  # Reduced delay for faster crawling
-CRAWL_MAX_PAGES = int(os.getenv("CRAWL_MAX_PAGES", "2000"))  # Increased max pages to capture all help articles
+CRAWL_CONCURRENCY = int(os.getenv("CRAWL_CONCURRENCY", "12"))  # Increased parallelism for faster help scraping
+CRAWL_DELAY_SEC = float(os.getenv("CRAWL_DELAY_SEC", "0.3"))  # Respectful but faster for help pages
+CRAWL_MAX_PAGES = int(os.getenv("CRAWL_MAX_PAGES", "5000"))  # Increased to capture ALL help articles
 CRAWL_TIMEOUT = int(os.getenv("CRAWL_TIMEOUT", "30"))
-CRAWL_MAX_DEPTH = int(os.getenv("CRAWL_MAX_DEPTH", "5"))  # Crawl depth for deep resource discovery
+CRAWL_MAX_DEPTH = int(os.getenv("CRAWL_MAX_DEPTH", "8"))  # Deeper crawl to find all nested help pages
 
 DATA_RAW_DIR = Path("data/raw")
 CRAWL_STATE = Path("data/.crawl_state.json")

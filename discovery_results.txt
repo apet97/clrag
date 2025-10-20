@@ -1,0 +1,38 @@
+
+=== CLOCKIFY HELP DISCOVERY REPORT ===
+
+TOTAL DISCOVERED: 1637 pages
+
+BY CATEGORY:
+- Help Articles: 23
+- API Documentation: 0
+- FAQ Pages: 0
+- Other (Marketing, etc): 1614
+
+HELP ARTICLES SAMPLE (first 20):
+  1. https://clockify.me/help/?swp_form%5Bform_id%5D=3&swps=Verification%20code
+  2. https://clockify.me/help/administration
+  3. https://clockify.me/help/administration/user-roles-and-permissions/who-can-do-what
+  4. https://clockify.me/help/apps
+  5. https://clockify.me/help/contact
+  6. https://clockify.me/help/contact/sales
+  7. https://clockify.me/help/de
+  8. https://clockify.me/help/es
+  9. https://clockify.me/help/fr
+  10. https://clockify.me/help/getting-started
+  11. https://clockify.me/help/integrations
+  12. https://clockify.me/help/projects
+  13. https://clockify.me/help/projects/import-clients-projects
+  14. https://clockify.me/help/projects/scheduling
+  15. https://clockify.me/help/pt
+  16. https://clockify.me/help/reports
+  17. https://clockify.me/help/reports/hourly-rates
+  18. https://clockify.me/help/track-time-and-expenses
+  19. https://clockify.me/help/track-time-and-expenses/auto-tracker
+  20. https://clockify.me/help/track-time-and-expenses/create-manage-time-off-policy
+
+  ... and 3 more help articles
+
+API DOCS SAMPLE (first 10):
+
+FAQ PAGES (first 10):
