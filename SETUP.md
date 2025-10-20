@@ -381,6 +381,254 @@ Output includes:
 
 ---
 
+## Prebuilt Index Docker Image
+
+### Overview
+
+Deploy with **baked-in FAISS index** for fast, reproducible production deployments. No ingestion at runtime—just load and serve.
+
+**Benefits:**
+- ✅ Fast startup (ms-scale, not minutes)
+- ✅ Reproducible (index locked, deterministic)
+- ✅ CI/CD friendly (build once, deploy anywhere)
+- ✅ All hardening preserved (determinism, safety, security)
+
+### Build Prebuilt Image
+
+**Prerequisites:**
+- Index already built locally: `index/faiss/clockify-help/index.faiss` + `meta.json`
+- Docker installed
+- Ollama server running (for validation at runtime)
+
+**Build Steps:**
+
+```bash
+# 1. Ensure index is built
+make ingest
+
+# 2. Build Docker image (with prebuilt index baked in)
+docker build -t clockify-rag:latest .
+
+# 3. Verify image size
+docker images clockify-rag:latest
+# Expected: ~200-300MB (depends on index size + python:3.11-slim)
+```
+
+### Run Prebuilt Image
+
+**With docker-compose (recommended for local testing):**
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    volumes:
+      - ollama_data:/root/.ollama
+
+  rag-api:
+    build: .
+    ports:
+      - "7000:7000"
+    environment:
+      - LLM_BASE_URL=http://ollama:11434
+      - EMBEDDING_MODEL=nomic-embed-text:latest
+      - API_TOKEN=your-secure-token-here
+      - ENV=prod
+      - NAMESPACES=clockify-help
+    depends_on:
+      - ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-H", "x-api-token: ${API_TOKEN}", "http://localhost:7000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  ollama_data:
+```
+
+**Run with docker-compose:**
+
+```bash
+# Start both Ollama and RAG API
+docker-compose up -d
+
+# View logs
+docker-compose logs -f rag-api
+
+# Health check
+curl -H "x-api-token: your-secure-token-here" http://localhost:7000/health
+
+# Stop
+docker-compose down
+```
+
+**Or run Docker directly:**
+
+```bash
+# Make sure Ollama is running on your host or in Docker
+docker run -d \
+  --name clockify-rag \
+  -p 7000:7000 \
+  -e LLM_BASE_URL=http://host.docker.internal:11434 \
+  -e EMBEDDING_MODEL=nomic-embed-text:latest \
+  -e API_TOKEN=your-secure-token-here \
+  -e ENV=prod \
+  --health-cmd='curl -f -H "x-api-token: your-secure-token-here" http://localhost:7000/health' \
+  --health-interval=30s \
+  --health-timeout=10s \
+  --health-retries=3 \
+  clockify-rag:latest
+
+# Check health
+docker exec clockify-rag curl -H "x-api-token: your-secure-token-here" http://localhost:7000/health
+```
+
+### Startup Validation
+
+When the container starts, the server validates:
+
+✅ **Index files exist:** `index/faiss/clockify-help/index.faiss` + `meta.json`
+✅ **Metadata valid:** JSON format, `dim` field present, vector count matches
+✅ **Ollama reachable:** Probes `/api/embeddings` to confirm server is running
+✅ **Dimension match:** Index dim == Ollama model dim (catches misconfigurations early)
+
+**If validation fails, startup logs will show:**
+
+```
+❌ STARTUP FAILURE: Missing prebuilt index for namespace 'clockify-help'
+   Expected: /app/index/faiss/clockify-help/index.faiss or .../index.bin
+   Fix: Run 'make ingest' to build the FAISS index before deployment
+```
+
+### Smoke Tests
+
+After container starts, run smoke tests:
+
+```bash
+API_TOKEN="your-secure-token-here"
+API_URL="http://localhost:7000"
+
+# 1. Health check
+curl -H "x-api-token: $API_TOKEN" $API_URL/health | jq .
+
+# 2. Search
+curl -H "x-api-token: $API_TOKEN" \
+  "$API_URL/search?q=timesheet&k=3" | jq .
+
+# 3. Chat
+curl -X POST -H "x-api-token: $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "How do I submit a timesheet?", "k": 3}' \
+  $API_URL/chat | jq .
+
+# 4. Metrics
+curl -H "x-api-token: $API_TOKEN" $API_URL/metrics
+```
+
+**Expected outputs:**
+
+**/health:**
+```json
+{
+  "status": "ok",
+  "namespaces": ["clockify-help"],
+  "index_loaded": true,
+  "vector_count": 127,
+  "embedding_dim": 768
+}
+```
+
+**/search:**
+```json
+{
+  "query": "timesheet",
+  "count": 3,
+  "request_id": "abc123...",
+  "results": [
+    {
+      "rank": 1,
+      "url": "https://clockify.me/help/article/timesheet",
+      "title": "How to submit a timesheet",
+      "score": 0.8547,
+      ...
+    },
+    ...
+  ]
+}
+```
+
+**/chat:**
+```json
+{
+  "answer": "To submit a timesheet [1], go to Projects [1] and clock in [2].",
+  "sources": [...],
+  "citations_found": 2,
+  "model_used": "gpt-oss:20b",
+  "latency_ms": {"retrieval": 45, "llm": 287, "total": 332},
+  "meta": {
+    "request_id": "def456...",
+    "temperature": 0.0,
+    ...
+  }
+}
+```
+
+### CI/CD Integration
+
+**GitHub Actions example** (build and push image on release):
+
+```yaml
+name: Build & Push RAG Image
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      # Run ingestion to build index
+      - name: Build FAISS index
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+          HELP_DIR=./newscrapeCLOCKIFY/markdown_20251020-002918_part001 make ingest
+
+      # Build and push Docker image
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/apet97/clockify-rag:${{ github.ref_name }}
+          registry: ghcr.io
+```
+
+### Production Deployment Checklist
+
+- [ ] Index built locally: `make ingest`
+- [ ] Index files verified: `ls -la index/faiss/clockify-help/`
+- [ ] Docker image built: `docker build -t clockify-rag:latest .`
+- [ ] Ollama server running (on target host or container)
+- [ ] Environment variables set: `LLM_BASE_URL`, `API_TOKEN`, `ENV=prod`
+- [ ] Health check passes: `/health` endpoint responds
+- [ ] Smoke tests pass: `/search` and `/chat` work
+- [ ] Logs reviewed for warnings/errors during startup validation
+
+---
+
 ## Production Deployment
 
 ### Pre-Production Checklist

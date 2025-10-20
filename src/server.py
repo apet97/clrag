@@ -33,8 +33,8 @@ app = FastAPI(default_response_class=ORJSONResponse)
 
 @app.on_event("startup")
 async def startup():
-    """Initialize embeddings and FAISS index on startup."""
-    logger.info("RAG System startup: seeding randomness and warming up embedding model...")
+    """Initialize embeddings and FAISS index on startup with validation."""
+    logger.info("RAG System startup: validating index, seeding randomness, warming up embedding model...")
 
     # Prod guard: API_TOKEN must not be "change-me" in production (AXIOM 0)
     ENV = os.getenv("ENV", "dev")
@@ -42,14 +42,93 @@ async def startup():
         logger.error("API_TOKEN must not be 'change-me' in production")
         raise RuntimeError("Invalid production config: API_TOKEN not configured")
 
+    # PREBUILT INDEX VALIDATION: Ensure index files exist and metadata is valid
+    logger.info(f"Validating prebuilt index for namespaces: {NAMESPACES}")
+    for ns in NAMESPACES:
+        root = INDEX_ROOT / ns
+        idx_path_faiss = root / "index.faiss"
+        idx_path_bin = root / "index.bin"
+        meta_path = root / "meta.json"
+
+        # Check index file exists
+        if not idx_path_faiss.exists() and not idx_path_bin.exists():
+            raise RuntimeError(
+                f"\n❌ STARTUP FAILURE: Missing prebuilt index for namespace '{ns}'\n"
+                f"   Expected: {idx_path_faiss} or {idx_path_bin}\n"
+                f"   Fix: Run 'make ingest' to build the FAISS index before deployment"
+            )
+
+        # Check metadata exists
+        if not meta_path.exists():
+            raise RuntimeError(
+                f"\n❌ STARTUP FAILURE: Missing metadata for namespace '{ns}'\n"
+                f"   Expected: {meta_path}\n"
+                f"   Fix: Run 'make ingest' to build the FAISS index before deployment"
+            )
+
+        # Validate metadata format and model/dimension
+        try:
+            meta_data = json.loads(meta_path.read_text())
+            meta_model = meta_data.get("model")
+            meta_dim = meta_data.get("dim") or meta_data.get("dimension")
+
+            logger.info(f"  Namespace '{ns}': model={meta_model}, dim={meta_dim}, vectors={meta_data.get('num_vectors', '?')}")
+
+            if not meta_dim or meta_dim <= 0:
+                raise ValueError(f"Invalid embedding dimension in metadata: {meta_dim}")
+
+        except (json.JSONDecodeError, ValueError) as e:
+            raise RuntimeError(
+                f"\n❌ STARTUP FAILURE: Invalid metadata for namespace '{ns}': {e}\n"
+                f"   File: {meta_path}\n"
+                f"   Fix: Ensure meta.json is valid JSON with 'dim' field"
+            )
+
+    # Probe Ollama to validate embedding model is available and get its dimension
+    logger.info(f"Probing Ollama for embedding model: {EMBEDDING_MODEL}")
+    try:
+        import requests
+        url = f"{os.getenv('LLM_BASE_URL', 'http://10.127.0.192:11434')}/api/embeddings"
+        payload = {"model": EMBEDDING_MODEL, "prompt": "test"}
+        resp = requests.post(url, json=payload, timeout=10)
+
+        if resp.status_code != 200:
+            raise RuntimeError(f"Ollama returned {resp.status_code}: {resp.text[:200]}")
+
+        data = resp.json()
+        ollama_dim = len(data.get("embedding", []))
+        logger.info(f"✓ Ollama embedding model ready: dim={ollama_dim}")
+
+        # Verify dimension matches across all namespaces
+        for ns in NAMESPACES:
+            meta_data = json.loads((INDEX_ROOT / ns / "meta.json").read_text())
+            meta_dim = meta_data.get("dim") or meta_data.get("dimension", 768)
+            if meta_dim != ollama_dim:
+                raise RuntimeError(
+                    f"\n❌ STARTUP FAILURE: Embedding dimension mismatch for namespace '{ns}'\n"
+                    f"   Index built with: dim={meta_dim}\n"
+                    f"   Ollama model provides: dim={ollama_dim}\n"
+                    f"   Fix: Rebuild index with correct EMBEDDING_MODEL or update environment"
+                )
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(
+            f"\n❌ STARTUP FAILURE: Cannot reach Ollama at {os.getenv('LLM_BASE_URL', 'http://10.127.0.192:11434')}\n"
+            f"   Error: {e}\n"
+            f"   Fix: Ensure LLM_BASE_URL is correct and Ollama server is running"
+        )
+
     # Seed randomness for deterministic behavior (AXIOM 1)
+    logger.info("Seeding randomness for deterministic retrieval...")
     random.seed(0)
     np.random.seed(0)
+
     try:
         warmup_embedding()
-        logger.info("Embedding model warmed up")
+        logger.info("✓ Embedding model warmed up")
     except Exception as e:
         logger.error(f"Embedding warmup failed: {e}")
+
+    logger.info("✅ RAG System startup complete: index validated, Ollama ready")
 
 @app.on_event("shutdown")
 def _shutdown():
@@ -70,10 +149,15 @@ _index_normalized: dict[str, bool] = {}
 
 def _load_index_for_ns(ns: str) -> NamespaceIndex:
     root = INDEX_ROOT / ns
-    idx_path = root / "index.bin"
+    # Try .faiss first, then .bin for compatibility
+    idx_path = root / "index.faiss"
+    if not idx_path.exists():
+        idx_path = root / "index.bin"
     meta_path = root / "meta.json"
     if not idx_path.exists() or not meta_path.exists():
-        raise RuntimeError(f"Index for namespace '{ns}' not found under {root}")
+        raise RuntimeError(f"Index for namespace '{ns}' not found under {root}\n"
+                          f"Expected: {root / 'index.faiss'} or {root / 'index.bin'}\n"
+                          f"Expected metadata: {meta_path}")
     index = faiss.read_index(str(idx_path))
     metas = json.loads(meta_path.read_text())
     rows = metas.get("rows") or metas.get("chunks", [])
