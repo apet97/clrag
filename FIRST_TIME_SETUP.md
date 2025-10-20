@@ -1,10 +1,14 @@
 # First Time Setup - Build FAISS Index
 
-**If you're getting "index/faiss/clockify not found" error:**
+**If you're getting "index/faiss/clockify not found" error or "HELP_DIR does not exist" error:**
 
-The index needs to be created the first time. Here's how:
+Fresh clones need to build the index for the first time. This is a 3-step process:
 
-## Option 1: Use Python (Recommended for First Time)
+1. **Setup Python environment** - Install dependencies
+2. **Crawl and ingest data** - Fetch Clockify help pages and build FAISS index (requires Ollama)
+3. **Build Docker image** - Package everything for deployment
+
+## Quick Start (Recommended)
 
 ```bash
 cd clrag
@@ -16,13 +20,18 @@ source .venv/bin/activate
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Build the FAISS index (creates index/faiss/clockify/)
+# 3. Make sure Ollama is running (http://localhost:11434)
+# Check: curl http://localhost:11434/api/tags
+
+# 4. Build the FAISS index (this fetches clockify.me/help pages)
 python -m src.ingest
 
-# 4. Now Docker will work!
+# 5. Now Docker will work!
 docker build -t rag-system:latest .
 docker-compose up -d
 ```
+
+**Note:** Step 4 takes 5-15 minutes to crawl and embed ~200 pages from clockify.me/help
 
 ## Option 2: Skip Docker, Use Python Directly
 
@@ -48,12 +57,32 @@ python -m src.server
 
 ## What src.ingest Does
 
-- Reads documentation files from `docs/` directory
-- Creates embeddings using Ollama
-- Builds FAISS index at `index/faiss/clockify/`
-- Creates metadata file `index/faiss/clockify/meta.json`
+The ingestion process requires pre-crawled HTML/markdown files in `data/clockify_help/`:
 
-This is a one-time operation that creates the index for production use.
+1. **Reads files** from `data/clockify_help/` (HTML/markdown files)
+2. **Creates embeddings** using Ollama's `nomic-embed-text` model
+3. **Builds FAISS index** at `index/faiss/clockify/`
+4. **Creates metadata** in `index/faiss/clockify/meta.json`
+
+**NOTE:** Fresh clones don't include pre-crawled HTML files. You must either:
+- **Option A:** Run the web crawler first to populate `data/clockify_help/`
+- **Option B:** Use pre-built index if available (check if `index/faiss/clockify/` already exists)
+
+### Option A: Crawl Data First (Recommended)
+
+```bash
+# Set Ollama URL if not at default
+export LLM_BASE_URL=http://localhost:11434
+
+# Run ingestion (crawls clockify.me/help and builds index)
+python -m src.ingest
+```
+
+This will:
+1. Fetch pages from `https://clockify.me/help/*`
+2. Save HTML to `data/clockify_help/`
+3. Create FAISS index
+4. Takes 5-15 minutes depending on internet speed
 
 ## After Index is Built
 
