@@ -17,6 +17,7 @@ from src.encode import encode_query, encode_texts, warmup as warmup_embedding
 from src.query_expand import expand
 from src.rerank import rerank
 from src.cache import init_cache, get_cache
+from src.search_improvements import detect_query_type, get_adaptive_k_multiplier, log_query_analysis
 
 API_TOKEN = os.getenv("API_TOKEN", "change-me")
 HOST = os.getenv("API_HOST", "0.0.0.0")
@@ -403,6 +404,11 @@ def search(q: str, k: int | None = None, namespace: str | None = None, request: 
         expansions = expand(q)  # [q, syn1, syn2, ...] up to 8
         logger.debug(f"Query expanded to {len(expansions)} variants")
 
+        # QUICK WIN: Detect query type for adaptive retrieval strategy
+        query_type = detect_query_type(q)
+        adaptive_k = get_adaptive_k_multiplier(query_type, k)
+        log_query_analysis(q, query_type, adaptive_k)
+
         # AXIOM 3: Encode all expansions with normalized embeddings (L2 norm = 1.0)
         vecs = encode_texts(expansions)  # Shape (len(expansions), 768), each normalized
 
@@ -420,8 +426,9 @@ def search(q: str, k: int | None = None, namespace: str | None = None, request: 
         # Use sorted() for consistent ordering across multiple calls
         ns_list = [namespace] if namespace in _indexes else sorted(_indexes.keys())
 
-        # Retrieve with k*6 to allow for deduplication and reranking
-        raw_k = k * 6 if k <= 5 else k * 3
+        # QUICK WIN: Adaptive k multiplier based on query type for better candidate pool
+        # Retrieve with adaptive_k instead of fixed k*6 or k*3
+        raw_k = min(adaptive_k, 100)  # Cap at 100 for efficiency
         per_ns = {ns: search_ns(ns, qvec[None,:].astype(np.float32), raw_k) for ns in ns_list}
 
         # Fuse and deduplicate by URL (AXIOM 4)
