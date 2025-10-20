@@ -22,10 +22,10 @@ COPY src/ src/
 COPY data/ data/
 
 # Copy prebuilt FAISS index (CRITICAL for fast startup)
-COPY index/faiss/clockify-help/ index/faiss/clockify-help/
+COPY index/faiss/clockify/ index/faiss/clockify/
 
 # Set environment variables for prebuilt image
-ENV NAMESPACES=clockify-help
+ENV NAMESPACES=clockify
 ENV EMBEDDING_MODEL=nomic-embed-text:latest
 ENV LLM_BASE_URL=http://ollama:11434
 ENV API_HOST=0.0.0.0
