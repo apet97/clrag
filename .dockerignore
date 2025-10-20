@@ -1,51 +1,74 @@
-# Git files
+# Version control
 .git
 .gitignore
+.gitattributes
+.github
 
-# Python
+# Python artifacts
 __pycache__
 *.pyc
 *.pyo
 *.pyd
-.Python
-env/
-venv/
-.venv/
+*.egg
 *.egg-info/
 dist/
 build/
+.Python
 
-# IDE
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE and editor files
 .vscode/
 .idea/
+.sublime-text
 *.swp
 *.swo
 *~
 .DS_Store
+Thumbs.db
 
-# Testing
+# Testing and coverage
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
+.hypothesis/
 
-# Documentation (included separately)
+# Package managers
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Documentation (large markdown files)
 *.md
+LICENSE
 
-# Raw data (not needed in image)
-newscrapeCLOCKIFY/
+# Large data files (can be rebuilt)
+data/raw/
+data/clean/
+data/chunks/
+clockify-help/
 
-# CI/CD
-.github/
-
-# Development
+# OS and temporary files
 .env
 .env.local
-.env.*.local
-conftest.py
-tests/
-scripts/
+*.tmp
+*.log
+temp/
 
-# Docker
-Dockerfile
-docker-compose.yml
-.dockerignore
+# CI/CD
+.travis.yml
+.circleci/
+.gitlab-ci.yml
+
+# Development artifacts
+Makefile
+scripts/
+tests/
+dev/
+sandbox/
+experimental/

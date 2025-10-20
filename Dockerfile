@@ -1,8 +1,8 @@
-# RAG v1: Baked FAISS Index Image
-# Prebuilt index baked into Docker image for fast, reproducible deployments
-# Includes: Python environment, dependencies, Ollama client, prebuilt FAISS index
+# RAG v1: Flexible Deployment Image
+# Supports both prebuilt FAISS index (for fast deployments) and dynamic index building
+# Includes: Python environment, dependencies, Ollama client, optional prebuilt FAISS index
 
-FROM python:3.11-slim as base
+FROM python:3.11-slim AS base
 
 # Set working directory
 WORKDIR /app
@@ -19,10 +19,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY src/ src/
-COPY data/ data/
+COPY public/ public/
 
-# Copy prebuilt FAISS index (CRITICAL for fast startup)
-COPY index/faiss/clockify/ index/faiss/clockify/
+# Copy data if available (optional for fresh deployments)
+COPY data/ data/ || true
+
+# Copy prebuilt FAISS index if available (optional, will be built on first run if missing)
+COPY index/ index/ 2>/dev/null || true
 
 # Set environment variables for prebuilt image
 ENV NAMESPACES=clockify
