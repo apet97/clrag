@@ -1,11 +1,12 @@
 from __future__ import annotations
-import os, time, json, math, typing as T, re
+import os, time, json, math, typing as T, re, random, hmac, hashlib
 from pathlib import Path
+from uuid import uuid4
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, Request, Header
 from fastapi.responses import ORJSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
 from loguru import logger
 
 import faiss
@@ -33,7 +34,10 @@ app = FastAPI(default_response_class=ORJSONResponse)
 @app.on_event("startup")
 async def startup():
     """Initialize embeddings and FAISS index on startup."""
-    logger.info("RAG System startup: warming up embedding model...")
+    logger.info("RAG System startup: seeding randomness and warming up embedding model...")
+    # Seed randomness for deterministic behavior (AXIOM 1)
+    random.seed(0)
+    np.random.seed(0)
     try:
         warmup_embedding()
         logger.info("Embedding model warmed up")
@@ -265,9 +269,8 @@ def search(q: str, k: int | None = None, namespace: str | None = None, request: 
     rate_limit(request.client.host if request and request.client else "unknown")
 
     _ensure_loaded()
-    k = k or RETRIEVAL_K
-    if k > 20:
-        k = 20
+    # Sanitize k: clamp to [1, 20] bounds
+    k = max(1, min(int(k or RETRIEVAL_K), 20))
 
     t0 = time.time()
 
@@ -290,8 +293,9 @@ def search(q: str, k: int | None = None, namespace: str | None = None, request: 
             logger.debug(f"Query vector norm={actual_norm:.6f} (expected ~1.0); reclamping")
             qvec = qvec / (actual_norm + 1e-8)
 
-        # AXIOM 1: Determinism via namespace-based retrieval
-        ns_list = [namespace] if namespace in _indexes else list(_indexes.keys())
+        # AXIOM 1: Determinism via deterministic namespace-based retrieval
+        # Use sorted() for consistent ordering across multiple calls
+        ns_list = [namespace] if namespace in _indexes else sorted(_indexes.keys())
 
         # Retrieve with k*6 to allow for deduplication and reranking
         raw_k = k * 6 if k <= 5 else k * 3
@@ -333,9 +337,8 @@ def chat(req: ChatRequest, request: Request, x_api_token: str | None = Header(de
     rate_limit(request.client.host if request and request.client else "unknown")
 
     _ensure_loaded()
-    k = req.k or RETRIEVAL_K
-    if k > 20:
-        k = 20
+    # Sanitize k: clamp to [1, 20] bounds
+    k = max(1, min(int(req.k or RETRIEVAL_K), 20))
 
     t0 = time.time()
 
@@ -347,7 +350,8 @@ def chat(req: ChatRequest, request: Request, x_api_token: str | None = Header(de
         qvec = np.mean(vecs, axis=0)
         qvec = qvec / (np.linalg.norm(qvec) + 1e-8)
 
-        ns_list = [req.namespace] if req.namespace in _indexes else list(_indexes.keys())
+        # Use sorted() for deterministic namespace ordering (AXIOM 1)
+        ns_list = [req.namespace] if req.namespace in _indexes else sorted(_indexes.keys())
         raw_k = k * 3  # For chat, use slightly smaller retrieval set
         per_ns = {ns: search_ns(ns, qvec[None,:].astype(np.float32), raw_k) for ns in ns_list}
 
@@ -405,8 +409,9 @@ def chat(req: ChatRequest, request: Request, x_api_token: str | None = Header(de
         t_llm = int((time.time() - t1) * 1000)
 
         # AXIOM 2: Extract and validate citations (AXIOM 9: test this grounding)
-        # Harden regex: capture [1], [2]... but avoid URLs/code; cap to two digits
-        citations_in_answer = re.findall(r'(?<!https?:\/\/[^\s]*)\[(\d{1,2})\]', answer)
+        # Safe citation parsing: strip URLs first, then extract [1], [2],...[99]
+        tmp = re.sub(r'https?://\S+', '<URL>', answer)
+        citations_in_answer = re.findall(r'\[(\d{1,2})\]', tmp)
         cited_chunks = []
         for cite_idx_str in set(citations_in_answer):
             try:
