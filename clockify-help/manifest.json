@@ -1,0 +1,11 @@
+{
+  "seed_count": 312,
+  "discovered": 616,
+  "visited": 300,
+  "excluded_langs": [
+    "de",
+    "es",
+    "pt"
+  ],
+  "generated_at": 1760977213
+}

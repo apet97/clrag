@@ -89,38 +89,41 @@ async def startup():
                 f"   Fix: Ensure meta.json is valid JSON with 'dim' field"
             )
 
-    # Probe Ollama to validate embedding model is available and get its dimension
-    logger.info(f"Probing Ollama for embedding model: {EMBEDDING_MODEL}")
-    try:
-        import requests
-        url = f"{os.getenv('LLM_BASE_URL', 'http://10.127.0.192:11434')}/api/embeddings"
-        payload = {"model": EMBEDDING_MODEL, "prompt": "test"}
-        resp = requests.post(url, json=payload, timeout=10)
+    # Probe Ollama to validate embedding model is available and get its dimension (skip in MOCK_LLM mode)
+    if not MOCK_LLM:
+        logger.info(f"Probing Ollama for embedding model: {EMBEDDING_MODEL}")
+        try:
+            import requests
+            url = f"{os.getenv('LLM_BASE_URL', 'http://10.127.0.192:11434')}/api/embeddings"
+            payload = {"model": EMBEDDING_MODEL, "prompt": "test"}
+            resp = requests.post(url, json=payload, timeout=10)
 
-        if resp.status_code != 200:
-            raise RuntimeError(f"Ollama returned {resp.status_code}: {resp.text[:200]}")
+            if resp.status_code != 200:
+                raise RuntimeError(f"Ollama returned {resp.status_code}: {resp.text[:200]}")
 
-        data = resp.json()
-        ollama_dim = len(data.get("embedding", []))
-        logger.info(f"✓ Ollama embedding model ready: dim={ollama_dim}")
+            data = resp.json()
+            ollama_dim = len(data.get("embedding", []))
+            logger.info(f"✓ Ollama embedding model ready: dim={ollama_dim}")
 
-        # Verify dimension matches across all namespaces
-        for ns in NAMESPACES:
-            meta_data = json.loads((INDEX_ROOT / ns / "meta.json").read_text())
-            meta_dim = meta_data.get("dim") or meta_data.get("dimension", 768)
-            if meta_dim != ollama_dim:
-                raise RuntimeError(
-                    f"\n❌ STARTUP FAILURE: Embedding dimension mismatch for namespace '{ns}'\n"
-                    f"   Index built with: dim={meta_dim}\n"
-                    f"   Ollama model provides: dim={ollama_dim}\n"
-                    f"   Fix: Rebuild index with correct EMBEDDING_MODEL or update environment"
-                )
-    except requests.exceptions.RequestException as e:
-        raise RuntimeError(
-            f"\n❌ STARTUP FAILURE: Cannot reach Ollama at {os.getenv('LLM_BASE_URL', 'http://10.127.0.192:11434')}\n"
-            f"   Error: {e}\n"
-            f"   Fix: Ensure LLM_BASE_URL is correct and Ollama server is running"
-        )
+            # Verify dimension matches across all namespaces
+            for ns in NAMESPACES:
+                meta_data = json.loads((INDEX_ROOT / ns / "meta.json").read_text())
+                meta_dim = meta_data.get("dim") or meta_data.get("dimension", 768)
+                if meta_dim != ollama_dim:
+                    raise RuntimeError(
+                        f"\n❌ STARTUP FAILURE: Embedding dimension mismatch for namespace '{ns}'\n"
+                        f"   Index built with: dim={meta_dim}\n"
+                        f"   Ollama model provides: dim={ollama_dim}\n"
+                        f"   Fix: Rebuild index with correct EMBEDDING_MODEL or update environment"
+                    )
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(
+                f"\n❌ STARTUP FAILURE: Cannot reach Ollama at {os.getenv('LLM_BASE_URL', 'http://10.127.0.192:11434')}\n"
+                f"   Error: {e}\n"
+                f"   Fix: Ensure LLM_BASE_URL is correct and Ollama server is running"
+            )
+    else:
+        logger.info("⚠️  MOCK_LLM mode enabled: skipping Ollama probe, using mock responses")
 
     # Seed randomness for deterministic behavior (AXIOM 1)
     logger.info("Seeding randomness for deterministic retrieval...")

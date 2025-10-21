@@ -1,0 +1,27 @@
+---
+{
+  "url": "",
+  "namespace": "langchain",
+  "title": "langsmith-server-a2a",
+  "h1": "langsmith-server-a2a",
+  "h2": [],
+  "fetched_at": "2025-10-19T19:18:02.437426",
+  "sha256_raw": "7786f697da7ff90f42c6fe84b41221f593126f68e605a2235abee43758b684a4"
+}
+---
+
+# langsmith-server-a2a
+
+> Source: https://docs.langchain.com/langsmith/server-a2a
+
+Agent2Agent (A2A) is Google’s protocol for enabling communication between conversational AI agents. LangSmith implements A2A support, allowing your agents to communicate with other A2A-compatible agents through a standardized protocol.The A2A endpoint is available in LangGraph Server at /a2a/{assistant_id}.
+Each assistant automatically exposes an A2A Agent Card that describes its capabilities and provides the information needed for other agents to connect. You can retrieve the agent card for any assistant using:
+Copy
+GET /.well-known/agent-card.json?assistant_id={assistant_id}
+The agent card includes the assistant’s name, description, available skills, supported input/output modes, and the A2A endpoint URL for communication.
+This example creates an A2A-compatible agent that processes incoming messages using OpenAI’s API and maintains conversational state. The agent defines a message-based state structure and handles the A2A protocol’s message format.To be compatible with the A2A “text” parts, the agent must have a messages key in state. Here’s an example:
+Copy
+"""LangGraph A2A conversational agent.Supports the A2A protocol with messages input for conversational interactions."""from __future__ import annotationsimport osfrom dataclasses import dataclassfrom typing import Any, Dict, List, TypedDictfrom langgraph.graph import StateGraphfrom langgraph.runtime import Runtimefrom openai import AsyncOpenAIclass Context(TypedDict): """Context parameters for the agent.""" my_configurable_param: str@dataclassclass State: """Input state for the agent. Defines the initial structure for A2A conversational messages. """ messages: List[Dict[str, Any]]async def call_model(state: State, runtime: Runtime[Context]) -> Dict[str, Any]: """Process conversational messages and returns output using OpenAI.""" # Initialize OpenAI client client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY")) # Process the incoming messages latest_message = state.messages[-1] if state.messages else {} user_content = latest_message.get("content", "No message content") # Create messages for OpenAI API openai_messages = [ { "role": "system", "content": "You are a helpful conversational agent. Keep responses brief and engaging." }, { "role": "user", "content": user_content } ] try: # Make OpenAI API call response = await client.chat.completions.create( model="gpt-3.5-turbo", messages=openai_messages, max_tokens=100, temperature=0.7 ) ai_response = response.choices[0].message.content except Exception as e: ai_response = f"I received your message but had trouble processing it. Error: {str(e)[:50]}..." # Create a response message response_message = { "role": "assistant", "content": ai_response } return { "messages": state.messages + [response_message] }# Define the graphgraph = ( StateGraph(State, context_schema=Context) .add_node(call_model) .add_edge("__start__", "call_model") .compile())
+Once your agents are running locally via langgraph dev or deployed to production, you can facilitate communication between them using the A2A protocol.This example demonstrates how two agents can communicate by sending JSON-RPC messages to each other’s A2A endpoints. The script simulates a multi-turn conversation where each agent processes the other’s response and continues the dialogue.
+Copy
+#!/usr/bin/env python3"""Agent-to-Agent conversation simulation using LangGraph A2A protocol."""import asyncioimport aiohttpimport osasync def send_message(session, port, assistant_id, text): """Send a message to an agent and return the response text.""" url = f"http://127.0.0.1:{port}/a2a/{assistant_id}" payload = { "jsonrpc": "2.0", "id": "", "method": "message/send", "params": { "message": { "role": "user", "parts": [{"kind": "text", "text": text}] }, "messageId": "", "thread": {"threadId": ""} } } headers = {"Accept": "application/json"} async with session.post(url, json=payload, headers=headers) as response: try: result = await response.json() return result["result"]["artifacts"][0]["parts"][0]["text"] except Exception as e: text = await response.text() print(f"Response error from port {port}: {response.status} - {text}") return f"Error from port {port}: {response.status}"async def simulate_conversation(): """Simulate a conversation between two agents.""" agent_a_id = os.getenv("AGENT_A_ID") agent_b_id = os.getenv("AGENT_B_ID") if not agent_a_id or not agent_b_id: print("Set AGENT_A_ID and AGENT_B_ID environment variables") return message = "Hello! Let's have a conversation." async with aiohttp.ClientSession() as session: for i in range(3): print(f"--- Round {i + 1} ---") # Agent A responds message = await send_message(session, 2024, agent_a_id, message) print(f"🔵 Agent A: {message}") # Agent B responds message = await send_message(session, 2025, agent_b_id, message) print(f"🔴 Agent B: {message}") print()if __name__ == "__main__": asyncio.run(simulate_conversation())

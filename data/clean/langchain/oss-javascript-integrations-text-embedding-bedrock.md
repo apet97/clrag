@@ -1,0 +1,28 @@
+---
+{
+  "url": "",
+  "namespace": "langchain",
+  "title": "oss-javascript-integrations-text-embedding-bedrock",
+  "h1": "oss-javascript-integrations-text-embedding-bedrock",
+  "h2": [],
+  "fetched_at": "2025-10-19T19:18:02.465677",
+  "sha256_raw": "98005b16ad20d493cdf65da00c192f76bc6ae2d2cc893f0e3fb73ae4b34c8f29"
+}
+---
+
+# oss-javascript-integrations-text-embedding-bedrock
+
+> Source: https://docs.langchain.com/oss/javascript/integrations/text_embedding/bedrock
+
+Amazon Bedrock is a fully managed service that offers a choice of high-performing foundation models (FMs) from leading AI companies like AI21 Labs, Anthropic, Cohere, Meta, Stability AI, and Amazon via a single API, along with a broad set of capabilities you need to build generative AI applications with security, privacy, and responsible AI.This will help you get started with Amazon Bedrock embedding models using LangChain. For detailed documentation on Bedrock features and configuration options, please refer to the API reference.
+To access Bedrock embedding models you’ll need to create an AWS account, get an API key, and install the @langchain/aws integration package.Head to the AWS docs to sign up for AWS and setup your credentials. You’ll also need to turn on model access for your account, which you can do by following these instructions.
+Now we can instantiate our model object and embed text.There are a few different ways to authenticate with AWS - the below examples rely on an access key, secret access key and region set in your environment variables:
+Embedding models are often used in retrieval-augmented generation (RAG) flows, both as part of indexing data as well as later retrieving it. For more detailed instructions, please see our RAG tutorials under the Learn tab.Below, see how to index and retrieve data using the embeddings object we initialized above. In this example, we will index and retrieve a sample document using the demo MemoryVectorStore.
+Copy
+// Create a vector store with a sample textimport { MemoryVectorStore } from "@langchain/classic/vectorstores/memory";const text = "LangChain is the framework for building context-aware reasoning applications";const vectorstore = await MemoryVectorStore.fromDocuments( [{ pageContent: text, metadata: {} }], embeddings,);// Use the vector store as a retriever that returns a single documentconst retriever = vectorstore.asRetriever(1);// Retrieve the most similar textconst retrievedDocuments = await retriever.invoke("What is LangChain?");retrievedDocuments[0].pageContent;
+Copy
+LangChain is the framework for building context-aware reasoning applications
+Under the hood, the vectorstore and retriever implementations are calling embeddings.embedDocument(...) and embeddings.embedQuery(...) to create embeddings for the text(s) used in fromDocuments and the retriever’s invoke operations, respectively.You can directly call these methods to get embeddings for your own use cases.
+You can embed multiple texts for indexing with embedDocuments. The internals used for this method may (but do not have to) differ from embedding queries:
+Copy
+const text2 = "LangGraph is a library for building stateful, multi-actor applications with LLMs";const vectors = await embeddings.embedDocuments([text, text2]);console.log(vectors[0].slice(0, 100));console.log(vectors[1].slice(0, 100));

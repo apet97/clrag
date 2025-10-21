@@ -1,0 +1,19 @@
+---
+{
+  "url": "",
+  "namespace": "langchain",
+  "title": "langsmith-add-metadata-tags",
+  "h1": "langsmith-add-metadata-tags",
+  "h2": [],
+  "fetched_at": "2025-10-19T19:18:02.461433",
+  "sha256_raw": "0cafed0deed19e07bb35d0c3145b80997eb6b41af99561f71b772bffa3767326"
+}
+---
+
+# langsmith-add-metadata-tags
+
+> Source: https://docs.langchain.com/langsmith/add-metadata-tags
+
+LangSmith supports sending arbitrary metadata and tags along with traces.Tags are strings that can be used to categorize or label a trace. Metadata is a dictionary of key-value pairs that can be used to store additional information about a trace.Both are useful for associating additional information with a trace, such as the environment in which it was executed, the user who initiated it, or an internal correlation ID. For more information on tags and metadata, see the Concepts page. For information on how to query traces and runs by metadata and tags, see the Filter traces in the application page.
+Copy
+import openaiimport langsmith as lsfrom langsmith.wrappers import wrap_openaiclient = openai.Client()messages = [ {"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": "Hello!"}] # You can set metadata & tags **statically** when decorating a function # Use the @traceable decorator with tags and metadata # Ensure that the LANGSMITH_TRACING environment variables are set for @traceable to work @ls.traceable( run_type="llm", name="OpenAI Call Decorator", tags=["my-tag"], metadata={"my-key": "my-value"} ) def call_openai( messages: list[dict], model: str = "gpt-4o-mini" ) -> str: # You can also dynamically set metadata on the parent run: rt = ls.get_current_run_tree() rt.metadata["some-conditional-key"] = "some-val" rt.tags.extend(["another-tag"]) return client.chat.completions.create( model=model, messages=messages, ).choices[0].message.content call_openai( messages, # To add at **invocation time**, when calling the function. # via the langsmith_extra parameter langsmith_extra={"tags": ["my-other-tag"], "metadata": {"my-other-key": "my-value"}} ) # Alternatively, you can use the context manager with ls.trace( name="OpenAI Call Trace", run_type="llm", inputs={"messages": messages}, tags=["my-tag"], metadata={"my-key": "my-value"}, ) as rt: chat_completion = client.chat.completions.create( model="gpt-4o-mini", messages=messages, ) rt.metadata["some-conditional-key"] = "some-val" rt.end(outputs={"output": chat_completion})# You can use the same techniques with the wrapped clientpatched_client = wrap_openai( client, tracing_extra={"metadata": {"my-key": "my-value"}, "tags": ["a-tag"]})chat_completion = patched_client.chat.completions.create( model="gpt-4o-mini", messages=messages, langsmith_extra={ "tags": ["my-other-tag"], "metadata": {"my-other-key": "my-value"}, },)
