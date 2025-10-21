@@ -15,13 +15,14 @@ try:
     RERANK_AVAILABLE = True
 except ImportError:
     RERANK_AVAILABLE = False
+    FlagReranker = None  # type: ignore
     logger.debug("FlagEmbedding not installed. Reranking disabled. Install with: pip install FlagEmbedding")
 
 
-_reranker: Optional[FlagReranker] = None
+_reranker: Optional[object] = None
 
 
-def _get_reranker() -> Optional[FlagReranker]:
+def _get_reranker() -> Optional[object]:
     """Lazy-load reranker if available."""
     global _reranker
     if not RERANK_AVAILABLE:
