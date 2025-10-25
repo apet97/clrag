@@ -28,7 +28,8 @@ PORT = int(os.getenv("API_PORT", "7000"))
 RETRIEVAL_K = int(os.getenv("RETRIEVAL_K", "5"))
 NAMESPACES = [s.strip() for s in os.getenv("NAMESPACES","clockify,langchain").split(",") if s.strip()]
 
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-base")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://10.127.0.192:11434")
 INDEX_MODE = os.getenv("INDEX_MODE", "single")
 INDEX_ROOT = Path("index/faiss")
 
@@ -94,7 +95,7 @@ async def startup():
         logger.info(f"Probing Ollama for embedding model: {EMBEDDING_MODEL}")
         try:
             import requests
-            url = f"{os.getenv('LLM_BASE_URL', 'http://10.127.0.192:11434')}/api/embeddings"
+            url = f"{LLM_BASE_URL}/api/embeddings"
             payload = {"model": EMBEDDING_MODEL, "prompt": "test"}
             resp = requests.post(url, json=payload, timeout=10)
 
@@ -118,9 +119,10 @@ async def startup():
                     )
         except requests.exceptions.RequestException as e:
             raise RuntimeError(
-                f"\n❌ STARTUP FAILURE: Cannot reach Ollama at {os.getenv('LLM_BASE_URL', 'http://10.127.0.192:11434')}\n"
+                f"\n❌ STARTUP FAILURE: Cannot reach Ollama at {LLM_BASE_URL}\n"
                 f"   Error: {e}\n"
-                f"   Fix: Ensure LLM_BASE_URL is correct and Ollama server is running"
+                f"   Fix: Ensure LLM_BASE_URL is correct and Ollama server is running\n"
+                f"   Current: LLM_BASE_URL={LLM_BASE_URL}"
             )
     else:
         logger.info("⚠️  MOCK_LLM mode enabled: skipping Ollama probe, using mock responses")
